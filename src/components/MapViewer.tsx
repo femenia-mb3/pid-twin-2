@@ -484,17 +484,17 @@ export const MapViewer: React.FC<MapViewerProps> = ({
 
     const rendererEdificios = L.canvas({ pane: 'edificiosCatastroPane', padding: 0.5 });
     const entradas: { layer: any; punto: PuntoEdificio; baseFill: string }[] = [];
-    const colorBase = (plantas: number) => plantas >= 6 ? '#0c4a6e' : plantas >= 3 ? '#0284c7' : '#38bdf8';
+    const colorBase = (plantas: number) => plantas >= 6 ? '#7fb4dc' : plantas >= 3 ? '#a6cfeb' : '#cde5f7';
     const capaCatastro = L.geoJSON(edificiosCatastro, {
       style: feature => {
         const plantas = Number(feature?.properties?.numberOfFloorsAboveGround || 1);
         return {
           pane: 'edificiosCatastroPane',
           renderer: rendererEdificios,
-          color: '#0369a1',
+          color: '#6fa8cf',
           weight: plantas >= 5 ? 1.15 : 0.75,
           fillColor: colorBase(plantas),
-          fillOpacity: 0.62
+          fillOpacity: 0.75
         };
       },
       onEachFeature: (feature, layer) => {
@@ -545,7 +545,7 @@ export const MapViewer: React.FC<MapViewerProps> = ({
     entradas.forEach((entrada, i) => {
       const color = colores[i];
       if (color) entrada.layer.setStyle({ fillColor: color, color: oscurecer(color, 0.82) });
-      else entrada.layer.setStyle({ fillColor: entrada.baseFill, color: '#0369a1' });
+      else entrada.layer.setStyle({ fillColor: entrada.baseFill, color: '#6fa8cf' });
     });
   }
 
