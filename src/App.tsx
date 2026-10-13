@@ -11,6 +11,7 @@ import {
 } from './data/demoData';
 import { MotorContextoSimulacion, ParametrosDestinoConfigurables } from './engine/simulationEngine';
 import { MapViewer } from './components/MapViewer';
+import WeatherOverlay from './components/WeatherOverlay';
 import { HEATMAP_LABELS, TipoMapaCalor } from './services/sensorVisuals';
 import { ThreeDViewer } from './components/ThreeDViewer';
 import { Static3DContextViewer } from './components/Static3DContextViewer';
@@ -842,6 +843,11 @@ export default function App() {
             onBaseClick={() => setPestañaLateral('sensores')}
           />
         )}
+
+        <WeatherOverlay
+          clima={clima}
+          omitirLluvia={nivelVisualizacion < 3 && escenarioVisualId === 'episodio_meteo'}
+        />
 
         {/* Modal de Detalle de elemento inspeccionado */}
         <ElementDetailModal

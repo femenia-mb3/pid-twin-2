@@ -209,6 +209,10 @@ export class MotorContextoSimulacion {
     if (params.condicionClima === 'LLUVIA' && (escenario.tipo !== 'EPISODIO_METEO' || intensidadEscenario >= 0.25)) {
       recomendacionesGestion.push('Alerta meteorológica: Dirigir flujos hacia centros culturales cubiertos con reserva de aforo en tiempo real.');
     }
+    if (params.condicionClima === 'CALOR_EXTREMO') {
+      recomendacionesGestion.push('Alerta meteorológica por ola de calor: Dirigir flujos hacia centros culturales cubiertos con reserva de aforo en tiempo real.');
+      recomendacionesGestion.push('Habilitar refugios climáticos, puntos de hidratación y sombra en rutas peatonales; reprogramar actividades al aire libre a primera y última hora.');
+    }
     if (escenario.tipo === 'CRUCERO_MASIVO' && intensidadEscenario >= 0.45) {
       recomendacionesGestion.push('Escalonar llegadas y reforzar la distribución desde los nodos de acceso para evitar concentraciones simultáneas.');
     }
