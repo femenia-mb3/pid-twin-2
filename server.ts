@@ -826,6 +826,25 @@ app.post('/api/models/reusable/:modelId/instantiate', (req, res) => {
   });
 });
 
+// Borrador de escenario desde una plantilla del catálogo, sin registrar nada en el servidor:
+// el cliente lo conserva solo en su sesión (desaparece al recargar).
+app.post('/api/models/reusable/:modelId/scenario-draft', (req, res) => {
+  const destinationId = req.query.destino as string | undefined;
+  if (!destinationId) return interoperabilityError(res, 422, 'El borrador requiere destino.');
+  const { zoneIds, parameters } = req.body || {};
+  const conversion = InteroperabilityCatalogService.modelToScenarioDraft(
+    req.params.modelId,
+    destinationId,
+    Array.isArray(zoneIds) ? zoneIds : [],
+    parameters || {},
+  );
+  interoperabilityNoStore(res);
+  if (!conversion.valid || !conversion.draft) {
+    return interoperabilityError(res, 422, conversion.errors?.[0] || 'No se pudo generar el borrador de escenario desde el modelo.');
+  }
+  return res.json({ type: 'ModelScenarioDraft', persistence: 'SESSION_ONLY', draft: conversion.draft });
+});
+
 // Importar un modelo del catálogo directamente a la pestaña Simulación como escenario ejecutable
 app.post('/api/models/reusable/:modelId/import-scenario', (req, res) => {
   const destinationId = scenarioDestination(req);

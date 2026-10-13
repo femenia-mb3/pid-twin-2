@@ -39,6 +39,8 @@ export interface ScenarioDefinition {
   archivedAt?: string;
   executionCount: number;
   inputs: ScenarioInputs;
+  /** Id de la plantilla del catálogo de la que procede (solo escenarios de sesión). */
+  sourceModelId?: string;
 }
 
 export interface ScenarioDraftInput {
@@ -49,6 +51,7 @@ export interface ScenarioDraftInput {
   type: ScenarioType;
   createdBy: string;
   inputs: ScenarioInputs;
+  sourceModelId?: string;
 }
 
 export interface ScenarioValidationIssue {

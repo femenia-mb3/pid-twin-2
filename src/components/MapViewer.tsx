@@ -5,6 +5,7 @@ import 'leaflet.heat';
 import { leyendaFlujoSimulacion } from '../services/simulationFlowLegend';
 import { RUTAS_CRUCERO_VIARIAS, RUTAS_EVENTO_VIARIAS } from '../data/rutasCruceroViarias';
 import { ZonaDestino, RecursoTuristico, SensorIoT } from '../types/ontology';
+import { FlujoModelo, leyendaFlujosModelo } from '../services/modelFlows';
 import { HEATMAP_GRADIENT_CSS, HEATMAP_LABELS, sensorIconSvg, sensorVisual, TipoMapaCalor } from '../services/sensorVisuals';
 import { KpiMapa, KPI_MAPA_CONFIG, clasesLeyenda, textoClase, oscurecer, valoresKpiEdificio, centroideGeoJSON, modelosKpiCacheados, coloresKpiEdificios, precalentarKpis, PuntoEdificio } from '../services/kpiBuildingColors';
 
@@ -28,6 +29,7 @@ export interface MapViewerProps {
     escenarioNombre: string;
     hora: number;
     intensidad: number;
+    flujos?: FlujoModelo[];
   };
   rutasDesvio: {
     origen: string;
@@ -415,6 +417,28 @@ export const MapViewer: React.FC<MapViewerProps> = ({
         });
       }
 
+      simulacionVisual.flujos?.forEach(flujoModelo => {
+        const peso = flujoModelo.peso;
+        const linea = L.polyline(flujoModelo.puntos, {
+          color: flujoModelo.color,
+          weight: (3 + intensidad * 4) * peso + 1,
+          opacity: (0.4 + intensidad * 0.5) * (flujoModelo.esDesvio ? 0.9 : 1),
+          dashArray: flujoModelo.esDesvio ? '2, 12' : '3, 12',
+          lineCap: 'round',
+          className: 'simulation-flow-path simulation-flow-modelo'
+        });
+        linea.bindTooltip(`${flujoModelo.etiqueta}<br/><b>${Math.round(intensidad * peso * 100)}% de intensidad</b>`, { sticky: true });
+        gSimulacion.addLayer(linea);
+        const fin = flujoModelo.puntos[flujoModelo.puntos.length - 1];
+        const pulsoModelo = L.divIcon({
+          className: 'simulation-pulse-icon',
+          html: `<span class="simulation-pulse" style="--simulation-color:${flujoModelo.color}; --simulation-opacity:${(0.3 + intensidad * 0.45) * peso + 0.1}; transform:scale(${flujoModelo.esDesvio ? 0.65 : 1})"></span>`,
+          iconSize: [30, 30],
+          iconAnchor: [15, 15]
+        });
+        gSimulacion.addLayer(L.marker(fin, { icon: pulsoModelo, interactive: false }));
+      });
+
       configuracion?.puntos.forEach((coordenadas, indice) => {
         const flujo = L.polyline(coordenadas, {
           color: configuracion.color,
@@ -649,6 +673,12 @@ export const MapViewer: React.FC<MapViewerProps> = ({
             </div>
           );
         })()}
+        {leyendaFlujosModelo(simulacionVisual.flujos ?? []).map(item => (
+          <div key={item.etiqueta} className="flex items-center space-x-2 pt-1 border-t border-slate-800">
+            <span className="w-4 h-1 border-b-[3px] border-dashed" style={{ borderColor: item.color }}></span>
+            <span className="font-medium" style={{ color: item.color }}>{item.etiqueta}</span>
+          </div>
+        ))}
         {rutasDesvio.length > 0 && capasActivas.rutas && (
           <div className="flex items-center space-x-2 pt-1 border-t border-slate-800">
             <span className="w-4 h-1 border-b-2 border-dashed border-sky-400"></span>

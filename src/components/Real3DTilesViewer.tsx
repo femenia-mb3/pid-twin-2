@@ -31,6 +31,7 @@ import { EDIFICIOS_OLEADA_1, Edificio3DRecord } from '../services/catalog3DServi
 import { OpenDataService } from '../services/openDataService';
 import { sensorMarkerDataUri, sensorVisual } from '../services/sensorVisuals';
 import { leyendaFlujoSimulacion } from '../services/simulationFlowLegend';
+import { FlujoModelo, leyendaFlujosModelo } from '../services/modelFlows';
 import { cargarViarioPrincipal, colorCarga, construirRed } from '../services/trafficNetwork';
 import { KpiMapa, KPI_MAPA_CONFIG, clasesLeyenda, textoClase, oscurecer, coloresKpiEdificios, precalentarKpis } from '../services/kpiBuildingColors';
 import { RUTAS_CRUCERO_VIARIAS, RUTAS_EVENTO_VIARIAS } from '../data/rutasCruceroViarias';
@@ -61,7 +62,7 @@ interface Real3DTilesViewerProps {
     capacidadDesvioHora: number;
     descripcion: string;
   }[];
-  simulacionVisual?: { escenarioId: string; intensidad: number };
+  simulacionVisual?: { escenarioId: string; intensidad: number; flujos?: FlujoModelo[] };
   /** Evolución temporal simulada compartida con el panel derecho. */
   evolucionTemporal?: {
     reproduciendo: boolean;
@@ -328,6 +329,33 @@ export const Real3DTilesViewer = forwardRef<Real3DTilesViewerHandle, Real3DTiles
           }));
         });
       }
+      simulacion.flujos?.forEach((flujoModelo) => {
+        const color = Color.fromCssColorString(flujoModelo.color);
+        const peso = flujoModelo.peso;
+        add({
+          id: flujoModelo.id,
+          name: flujoModelo.etiqueta,
+          description: `${Math.round(intensidad * peso * 100)}% de intensidad`,
+          polyline: {
+            positions: flujoModelo.puntos.map(([lat, lng]) => Cartesian3.fromDegrees(lng, lat, 24)),
+            width: (3 + intensidad * 4) * peso + 1,
+            material: new PolylineDashMaterialProperty({
+              color: color.withAlpha(0.5 + intensidad * 0.45),
+              dashLength: 24,
+              dashPattern: new CallbackProperty(() => {
+                const k = flowPhaseRef.current % 16;
+                return ((0xF0F0 << k) | (0xF0F0 >> (16 - k))) & 0xFFFF;
+              }, false) as any,
+            }),
+          },
+        });
+        const [latFin, lngFin] = flujoModelo.puntos[flujoModelo.puntos.length - 1];
+        add({
+          id: `${flujoModelo.id}-destino`,
+          position: Cartesian3.fromDegrees(lngFin, latFin, 24),
+          point: { pixelSize: new CallbackProperty(() => (8 + intensidad * 6) * peso * (1 + 0.35 * Math.sin(flowPhaseRef.current / 16 * Math.PI * 2)) + 4, false) as any, color: color.withAlpha(0.8), outlineColor: Color.WHITE, outlineWidth: 2 },
+        });
+      });
       flujo?.puntos.forEach((coordenadas, indice) => {
         const color = Color.fromCssColorString(flujo.color);
         add({
@@ -934,7 +962,7 @@ export const Real3DTilesViewer = forwardRef<Real3DTilesViewerHandle, Real3DTiles
     const viewer = viewerRef.current;
     if (!viewer || viewer.isDestroyed()) return;
     rebuildOperationalEntities(viewer);
-  }, [recursos, sensores, rutasDesvio, analytics4D, zonasInundacionListas, simulacionVisual?.escenarioId, simulacionVisual && Math.round(simulacionVisual.intensidad * 20)]);
+  }, [recursos, sensores, rutasDesvio, analytics4D, zonasInundacionListas, simulacionVisual?.escenarioId, simulacionVisual?.flujos, simulacionVisual && Math.round(simulacionVisual.intensidad * 20)]);
 
   // Zonas de acumulación de agua: se descargan al activar el episodio de lluvia.
   const lluviaActiva = simulacionVisual?.escenarioId === 'episodio_meteo';
@@ -1357,6 +1385,12 @@ export const Real3DTilesViewer = forwardRef<Real3DTilesViewerHandle, Real3DTiles
             </div>
           );
         })()}
+        {leyendaFlujosModelo(simulacionVisual?.flujos ?? []).map(item => (
+          <div key={item.etiqueta} className="mt-2 flex items-center gap-2 border-t border-slate-100 pt-2 text-[10px] font-semibold" style={{ color: item.color }}>
+            <span className="h-1 w-4 border-b-[3px] border-dashed" style={{ borderColor: item.color }} />
+            {item.etiqueta}
+          </div>
+        ))}
         <div className="mt-2 flex items-center gap-1 border-t border-slate-100 pt-2 text-[9px] text-slate-500">
           <MapPin className="h-3 w-3" />
           <span>{analytics4D ? 'Indicador sintético por edificio y hora' : 'Fichas con permisos UAS STS-01 y QA'}</span>

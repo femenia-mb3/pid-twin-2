@@ -18,7 +18,8 @@ import {
 } from 'lucide-react';
 import { Destino, ZonaDestino } from '../types/ontology';
 import { ReusableModelTemplate } from '../types/interoperability';
-import { ScenarioDefinition } from '../types/scenarioStudio';
+import { ScenarioDefinition, ScenarioDraftInput, createScenarioDraft } from '../types/scenarioStudio';
+import { applyModelProfile, createSessionScenario, packageToSessionScenario } from '../services/sessionScenarios';
 import { SimulationModelPackageV1 } from '../types/simulationModelPackage';
 import { DataBindingModal } from './DataBindingModal';
 
@@ -28,8 +29,8 @@ interface SimulationDesignerModalProps {
   destination: Destino;
   tenantId: string;
   zones: ZonaDestino[];
+  /** El escenario se añade al panel del usuario solo durante la sesión (no se guarda). */
   onScenarioImported: (scenario: ScenarioDefinition) => void;
-  onOpenStudioFromScratch: () => void;
 }
 
 export const SimulationDesignerModal: React.FC<SimulationDesignerModalProps> = ({
@@ -39,7 +40,6 @@ export const SimulationDesignerModal: React.FC<SimulationDesignerModalProps> = (
   tenantId,
   zones,
   onScenarioImported,
-  onOpenStudioFromScratch,
 }) => {
   const [activeTab, setActiveTab] = useState<'catalog' | 'upload_package' | 'own_model'>('catalog');
   const [models, setModels] = useState<ReusableModelTemplate[]>([]);
@@ -56,7 +56,10 @@ export const SimulationDesignerModal: React.FC<SimulationDesignerModalProps> = (
   const [validatedPackage, setValidatedPackage] = useState<SimulationModelPackageV1 | null>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [validating, setValidating] = useState(false);
-  const [persisting, setPersisting] = useState(false);
+  const [appliedMapping, setAppliedMapping] = useState<string[]>([]);
+
+  // Editor visual no-code
+  const [editorDraft, setEditorDraft] = useState<ScenarioDraftInput>(() => createScenarioDraft(destination.id, tenantId));
 
   // Modal de vínculos
   const [bindingModalOpen, setBindingModalOpen] = useState(false);
@@ -66,6 +69,7 @@ export const SimulationDesignerModal: React.FC<SimulationDesignerModalProps> = (
     setLoading(true);
     setMessage(null);
     setSelectedZoneIds(zones.slice(0, 2).map(z => z.id));
+    setEditorDraft({ ...createScenarioDraft(destination.id, tenantId), inputs: { ...createScenarioDraft(destination.id, tenantId).inputs, zoneIds: zones.slice(0, 2).map(z => z.id) } });
 
     fetch(`/api/models/reusable?destino=${destination.id}`)
       .then(res => res.json())
@@ -103,40 +107,34 @@ export const SimulationDesignerModal: React.FC<SimulationDesignerModalProps> = (
     );
   };
 
+  const addToSession = (scenario: ScenarioDefinition, text: string) => {
+    setMessage({ text, type: 'success' });
+    setTimeout(() => {
+      onScenarioImported(scenario);
+      onClose();
+    }, 600);
+  };
+
   const handleImportToSimulator = async () => {
     if (!selectedModel) return;
     setImporting(true);
     setMessage(null);
 
     try {
-      const token = localStorage.getItem('pid_auth_token') || '';
-      const response = await fetch(`/api/models/reusable/${selectedModel.id}/import-scenario?destino=${destination.id}`, {
+      const response = await fetch(`/api/models/reusable/${selectedModel.id}/scenario-draft?destino=${destination.id}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-PID-Tenant': tenantId,
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({
-          zoneIds: selectedZoneIds,
-          parameters: modelParameters
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ zoneIds: selectedZoneIds, parameters: modelParameters }),
       });
-
       const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Error importando el modelo al simulador.');
+      if (!response.ok || !data.draft) {
+        throw new Error(data.error || 'No se pudo generar la simulación desde el modelo.');
       }
-
-      if (data.scenario) {
-        setMessage({ text: `¡Modelo «${selectedModel.title}» importado con éxito como escenario ejecutable!`, type: 'success' });
-        setTimeout(() => {
-          onScenarioImported(data.scenario);
-          onClose();
-        }, 800);
-      }
+      const centroZoneIds = zones.filter(z => z.tipoZona === 'CENTRO_HISTORICO').map(z => z.id);
+      const scenario = createSessionScenario(applyModelProfile({ ...data.draft, tenantId }, selectedModel.id, centroZoneIds));
+      addToSession(scenario, `«${selectedModel.title}» añadida a tu panel. Estará disponible hasta que recargues la página.`);
     } catch (err: any) {
-      setMessage({ text: err.message || 'Error en la importación.', type: 'error' });
+      setMessage({ text: err.message || 'Error al añadir la simulación.', type: 'error' });
     } finally {
       setImporting(false);
     }
@@ -257,33 +255,37 @@ evidence:
     }
   };
 
-  const handlePersistPackage = async () => {
-    if (!rawPackageText) return;
-    setPersisting(true);
-
-    try {
-      const token = localStorage.getItem('pid_auth_token') || '';
-      const res = await fetch(`/api/models/packages/import?destino=${destination.id}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-PID-Tenant': tenantId,
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({ rawContent: rawPackageText })
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Error guardando paquete en PostGIS.');
-      }
-
-      setMessage({ text: `Paquete «${data.package.name}» (v${data.package.version}) guardado en PostGIS. Estado: BORRADOR.`, type: 'success' });
-    } catch (err: any) {
-      setMessage({ text: err.message, type: 'error' });
-    } finally {
-      setPersisting(false);
+  const handleAddPackage = () => {
+    if (!validatedPackage) return;
+    if (selectedZoneIds.length === 0) {
+      setMessage({ text: 'Selecciona al menos una zona afectada.', type: 'error' });
+      return;
     }
+    const { scenario, applied } = packageToSessionScenario(validatedPackage, destination.id, tenantId, selectedZoneIds);
+    setAppliedMapping(applied);
+    addToSession(scenario, `«${validatedPackage.name}» añadida a tu panel. Estará disponible hasta que recargues la página.`);
+  };
+
+  const patchEditor = <K extends keyof ScenarioDraftInput['inputs']>(key: K, value: ScenarioDraftInput['inputs'][K]) => {
+    setEditorDraft(current => ({ ...current, inputs: { ...current.inputs, [key]: value } }));
+  };
+
+  const toggleEditorZone = (id: string) => {
+    const zoneIds = editorDraft.inputs.zoneIds;
+    patchEditor('zoneIds', zoneIds.includes(id) ? zoneIds.filter(z => z !== id) : [...zoneIds, id]);
+  };
+
+  const handleCreateFromEditor = () => {
+    if (!editorDraft.name.trim()) {
+      setMessage({ text: 'Indica un nombre para la simulación.', type: 'error' });
+      return;
+    }
+    if (editorDraft.inputs.zoneIds.length === 0) {
+      setMessage({ text: 'Selecciona al menos una zona afectada.', type: 'error' });
+      return;
+    }
+    const scenario = createSessionScenario({ ...editorDraft, destinationId: destination.id, tenantId });
+    addToSession(scenario, `«${scenario.name}» creada y añadida a tu panel. Estará disponible hasta que recargues la página.`);
   };
 
   if (!isOpen) return null;
@@ -475,7 +477,7 @@ evidence:
                   {/* Botón de Importación */}
                   <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
                     <span className="text-[11px] text-slate-500">
-                      Convierte la plantilla en un escenario operable y persistible.
+                      Añade la simulación a tu panel. Solo estará disponible hasta que recargues la página.
                     </span>
                     <button
                       onClick={handleImportToSimulator}
@@ -483,7 +485,7 @@ evidence:
                       className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-2 disabled:opacity-50"
                     >
                       <Download className="w-4 h-4" />
-                      {importing ? 'Importando...' : 'Importar al Simulador'}
+                      {importing ? 'Añadiendo...' : 'Añadir a mi panel'}
                     </button>
                   </div>
                 </>
@@ -592,17 +594,40 @@ evidence:
                     </div>
                   </div>
 
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600">Zonas afectadas en {destination.nombre}</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      {zones.map(z => (
+                        <div
+                          key={z.id}
+                          onClick={() => toggleZone(z.id)}
+                          className={`p-2 rounded-lg border text-xs cursor-pointer flex items-center justify-between ${
+                            selectedZoneIds.includes(z.id) ? 'border-emerald-600 bg-white font-bold text-slate-800' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span>{z.nombre}</span>
+                          {selectedZoneIds.includes(z.id) && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {appliedMapping.length > 0 && (
+                    <ul className="text-[11px] text-slate-600 list-disc pl-5">
+                      {appliedMapping.map(item => <li key={item}>{item}</li>)}
+                    </ul>
+                  )}
+
                   <div className="flex items-center justify-between pt-2">
                     <span className="text-[11px] text-slate-500">
-                      Se persistirá en PostGIS en estado BORRADOR para su posterior revisión humana.
+                      Se añadirá a tu panel de simulaciones solo durante esta sesión; desaparece al recargar la página.
                     </span>
                     <button
-                      onClick={handlePersistPackage}
-                      disabled={persisting}
+                      onClick={handleAddPackage}
                       className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm"
                     >
                       <FileCheck2 className="w-4 h-4" />
-                      {persisting ? 'Guardando...' : 'Persistir en PostGIS'}
+                      Añadir a mi panel
                     </button>
                   </div>
                 </div>
@@ -627,32 +652,144 @@ evidence:
 
         {/* Pestaña 3: Editor Visual */}
         {activeTab === 'own_model' && (
-          <div className="p-8 flex-1 overflow-y-auto flex items-center justify-center">
-            <div className="max-w-md text-center space-y-4">
-              <div className="w-16 h-16 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center mx-auto">
-                <Sliders className="w-8 h-8" />
+          <div className="p-6 flex-1 overflow-y-auto">
+            <div className="max-w-3xl mx-auto space-y-5">
+              <div>
+                <h3 className="text-base font-bold text-slate-800">Editor Visual de Simulaciones</h3>
+                <p className="text-xs text-slate-500">Define aforos, meteorología, movilidad y umbrales. La simulación se añade a tu panel solo durante esta sesión.</p>
               </div>
-              <h3 className="text-base font-bold text-slate-800">Editor Visual de Escenarios</h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Diseña simulaciones personalizadas ajustando aforos, meteorología, movilidad y umbrales de alerta en tiempo real sobre el gemelo.
-              </p>
-              <button
-                onClick={() => {
-                  onOpenStudioFromScratch();
-                  onClose();
-                }}
-                className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-md inline-flex items-center gap-2"
-              >
-                <span>Abrir Editor Visual</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <label className="block text-xs font-semibold text-slate-700 md:col-span-2">
+                  Nombre
+                  <input
+                    value={editorDraft.name}
+                    onChange={e => setEditorDraft(c => ({ ...c, name: e.target.value }))}
+                    placeholder="Ej.: Fin de semana de feria con calor"
+                    className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs outline-none focus:border-red-500"
+                  />
+                </label>
+                <label className="block text-xs font-semibold text-slate-700 md:col-span-2">
+                  Descripción
+                  <textarea
+                    rows={2}
+                    value={editorDraft.description}
+                    onChange={e => setEditorDraft(c => ({ ...c, description: e.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs outline-none focus:border-red-500"
+                  />
+                </label>
+                <label className="block text-xs font-semibold text-slate-700">
+                  Tipo de escenario
+                  <select
+                    value={editorDraft.type}
+                    onChange={e => setEditorDraft(c => ({ ...c, type: e.target.value as ScenarioDraftInput['type'] }))}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2 text-xs outline-none focus:border-red-500"
+                  >
+                    <option value="PERSONALIZADO">Personalizado</option>
+                    <option value="EVENTO_CULTURAL">Evento cultural</option>
+                    <option value="CRUCERO_MASIVO">Llegada / crucero</option>
+                    <option value="EPISODIO_METEO">Episodio meteorológico</option>
+                    <option value="CORTE_ACCESO">Corte o restricción de acceso</option>
+                  </select>
+                </label>
+                <label className="block text-xs font-semibold text-slate-700">
+                  Meteorología
+                  <select
+                    value={editorDraft.inputs.climate}
+                    onChange={e => patchEditor('climate', e.target.value as ScenarioDraftInput['inputs']['climate'])}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2 text-xs outline-none focus:border-red-500"
+                  >
+                    <option value="DESPEJADO">Despejado</option>
+                    <option value="LLUVIA">Lluvia</option>
+                    <option value="CALOR_EXTREMO">Calor extremo</option>
+                  </select>
+                </label>
+                <label className="block text-xs font-semibold text-slate-700">
+                  Movilidad
+                  <select
+                    value={editorDraft.inputs.mobilityMode}
+                    onChange={e => patchEditor('mobilityMode', e.target.value as ScenarioDraftInput['inputs']['mobilityMode'])}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2 text-xs outline-none focus:border-red-500"
+                  >
+                    <option value="NORMAL">Normal</option>
+                    <option value="RESTRINGIDA">Restringida</option>
+                    <option value="REFORZADA">Reforzada</option>
+                  </select>
+                </label>
+                <label className="block text-xs font-semibold text-slate-700">
+                  Distribución espacial
+                  <select
+                    value={editorDraft.inputs.spatialDistribution}
+                    onChange={e => patchEditor('spatialDistribution', e.target.value as ScenarioDraftInput['inputs']['spatialDistribution'])}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2 text-xs outline-none focus:border-red-500"
+                  >
+                    <option value="UNIFORME">Uniforme</option>
+                    <option value="CONCENTRADA">Concentrada</option>
+                    <option value="REDISTRIBUIDA">Redistribuida</option>
+                  </select>
+                </label>
+                <label className="block text-xs font-semibold text-slate-700">
+                  <span className="flex justify-between"><span>Hora</span><span className="font-mono text-slate-500">{String(editorDraft.inputs.hour).padStart(2, '0')}:00</span></span>
+                  <input type="range" min={0} max={23} value={editorDraft.inputs.hour} onChange={e => patchEditor('hour', Number(e.target.value))} className="w-full accent-red-600" />
+                </label>
+                <label className="block text-xs font-semibold text-slate-700">
+                  <span className="flex justify-between"><span>Variación de visitantes</span><span className="font-mono text-slate-500">{editorDraft.inputs.visitorVariationPct > 0 ? '+' : ''}{editorDraft.inputs.visitorVariationPct} %</span></span>
+                  <input type="range" min={-50} max={150} value={editorDraft.inputs.visitorVariationPct} onChange={e => patchEditor('visitorVariationPct', Number(e.target.value))} className="w-full accent-red-600" />
+                </label>
+                <label className="block text-xs font-semibold text-slate-700">
+                  <span className="flex justify-between"><span>Capacidad operativa</span><span className="font-mono text-slate-500">{editorDraft.inputs.operationalCapacityPct} %</span></span>
+                  <input type="range" min={30} max={130} value={editorDraft.inputs.operationalCapacityPct} onChange={e => patchEditor('operationalCapacityPct', Number(e.target.value))} className="w-full accent-red-600" />
+                </label>
+                <label className="block text-xs font-semibold text-slate-700">
+                  <span className="flex justify-between"><span>Umbral de alerta</span><span className="font-mono text-slate-500">{editorDraft.inputs.alertThresholdPct} %</span></span>
+                  <input type="range" min={40} max={120} value={editorDraft.inputs.alertThresholdPct} onChange={e => patchEditor('alertThresholdPct', Number(e.target.value))} className="w-full accent-red-600" />
+                </label>
+                <label className="block text-xs font-semibold text-slate-700">
+                  <span className="flex justify-between"><span>Intensidad del escenario</span><span className="font-mono text-slate-500">{editorDraft.inputs.intensity.toFixed(1)}</span></span>
+                  <input type="range" min={0} max={2} step={0.1} value={editorDraft.inputs.intensity} onChange={e => patchEditor('intensity', Number(e.target.value))} className="w-full accent-red-600" />
+                </label>
+              </div>
+
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <Compass className="w-3.5 h-3.5 text-red-600" />
+                  Zonas afectadas en {destination.nombre}
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  {zones.map(z => (
+                    <div
+                      key={z.id}
+                      onClick={() => toggleEditorZone(z.id)}
+                      className={`p-2.5 rounded-lg border text-xs cursor-pointer flex items-center justify-between transition-all ${
+                        editorDraft.inputs.zoneIds.includes(z.id)
+                          ? 'border-red-500 bg-red-50/40 font-bold text-slate-800'
+                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span>{z.nombre}</span>
+                      {editorDraft.inputs.zoneIds.includes(z.id) && <CheckCircle2 className="w-4 h-4 text-red-600" />}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
+                <span className="text-[11px] text-slate-500">Solo disponible hasta que recargues la página.</span>
+                <button
+                  onClick={handleCreateFromEditor}
+                  className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-2"
+                >
+                  <ArrowRight className="w-4 h-4" />
+                  Crear y añadir a mi panel
+                </button>
+              </div>
             </div>
           </div>
         )}
 
         {/* Pie */}
         <div className="px-6 py-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-xs text-slate-500">
-          <span>Toda simulación importada preserva su trazabilidad ontológica y huella SHA-256.</span>
+          <span>Las simulaciones que añadas solo existen en tu sesión: desaparecen al recargar la página.</span>
           <button
             onClick={onClose}
             className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl transition-colors"

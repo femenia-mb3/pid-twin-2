@@ -48,6 +48,8 @@ import { ModelCalibrationModal } from './components/ModelCalibrationModal';
 import { Edificio3DRecord } from './services/catalog3DService';
 import { ContextPackageV1 } from './types/contextPackage';
 import { ScenarioDefinition, ScenarioExecution, scenarioToRuntimeBinding } from './types/scenarioStudio';
+import { isSessionScenarioId } from './services/sessionScenarios';
+import { flujosParaEscenario } from './services/modelFlows';
 import { AiSimulationProposal } from './types/aiAgent';
 import {
   Globe,
@@ -178,7 +180,27 @@ export default function App() {
   const [modalGoogleGeoAbierto, setModalGoogleGeoAbierto] = useState<boolean>(false);
 
   const [drawerAiAbierto, setDrawerAiAbierto] = useState<boolean>(false);
-  const [escenarioEditorActivo, setEscenarioEditorActivo] = useState<ScenarioDefinition | null>(null);
+  // Simulaciones creadas por el usuario (catálogo, paquete YAML o editor visual): solo en memoria de esta sesión.
+  const [escenariosSesion, setEscenariosSesion] = useState<ScenarioDefinition[]>([]);
+  const escenariosSesionDestino = useMemo(
+    () => escenariosSesion.filter(escenario => escenario.destinationId === destinoActual.id),
+    [escenariosSesion, destinoActual.id],
+  );
+  const escenarioEditorActivo = escenariosSesionDestino.find(escenario => escenario.id === escenarioSeleccionadoId) ?? null;
+  // Flujos turísticos propios de la simulación del catálogo activa (más la Ruta de Desvío con lluvia o calor).
+  const flujosModelo = useMemo(
+    () => flujosParaEscenario(escenarioEditorActivo?.sourceModelId, clima),
+    [escenarioEditorActivo?.sourceModelId, clima],
+  );
+  // Registrar (o actualizar) un escenario de sesión; pasar null no hace nada.
+  const setEscenarioEditorActivo = (escenario: ScenarioDefinition | null) => {
+    if (!escenario) return;
+    setEscenariosSesion(actuales => [...actuales.filter(item => item.id !== escenario.id), escenario]);
+  };
+  const handleEliminarEscenarioSesion = (escenarioId: string) => {
+    setEscenariosSesion(actuales => actuales.filter(item => item.id !== escenarioId));
+    if (escenarioSeleccionadoId === escenarioId) setEscenarioSeleccionadoId('base');
+  };
   const [ultimaEjecucionEditor, setUltimaEjecucionEditor] = useState<ScenarioExecution | null>(null);
   const [fichaNivelAbierta, setFichaNivelAbierta] = useState<boolean>(false);
   const [edificioSeleccionado, setEdificioSeleccionado] = useState<Edificio3DRecord | null>(null);
@@ -268,9 +290,9 @@ export default function App() {
       ...(destinoActual.id === 'malaga' || destinoActual.id === 'palma'
         ? ESCENARIOS_PREDEFINIDOS
         : createRuntimeScenarioPresets(zonasFiltradas)),
-      ...(escenarioEditorBinding ? [escenarioEditorBinding.scenario] : []),
+      ...escenariosSesionDestino.map(escenario => scenarioToRuntimeBinding(escenario).scenario),
     ],
-    [destinoActual.id, zonasFiltradas, escenarioEditorBinding],
+    [destinoActual.id, zonasFiltradas, escenariosSesionDestino],
   );
 
   const escenarioActual = useMemo(() => {
@@ -368,16 +390,19 @@ export default function App() {
   }, [reproduciendoSimulacion]);
 
   const handleSeleccionarEscenario = (escenarioId: string) => {
-    if (escenarioEditorActivo?.id !== escenarioId) {
-      setEscenarioEditorActivo(null);
-      setUltimaEjecucionEditor(null);
-    }
+    if (ultimaEjecucionEditor?.scenario.id !== escenarioId) setUltimaEjecucionEditor(null);
     setEscenarioSeleccionadoId(escenarioId);
     setReproduciendoSimulacion(false);
     setTipoMapaCalor('afluencia');
     setCapasActivas({ zonas: true, calor: true, recursos: true, sensores: true, rutas: true });
 
-    if (escenarioId === 'presion-alta-demanda' || escenarioId === 'crucero_masivo') {
+    const escenarioSesion = escenariosSesionDestino.find(escenario => escenario.id === escenarioId);
+    if (escenarioSesion) {
+      setHoraSimulacion(escenarioSesion.inputs.hour);
+      setClima(escenarioSesion.inputs.climate);
+      setIncrementoManual(escenarioSesion.inputs.visitorVariationPct);
+      setUmbralAlerta(escenarioSesion.inputs.alertThresholdPct);
+    } else if (escenarioId === 'presion-alta-demanda' || escenarioId === 'crucero_masivo') {
       setHoraSimulacion(10);
       setClima('DESPEJADO');
     } else if (escenarioId === 'evento-local' || escenarioId === 'evento_cultural') {
@@ -797,7 +822,7 @@ export default function App() {
               recursos={resultadoSimulacion.recursosResultados}
               sensores={resultadoSimulacion.sensoresSimulados}
               rutasDesvio={resultadoSimulacion.rutasOptimizadas}
-              simulacionVisual={{ escenarioId: escenarioVisualId, intensidad: intensidadVisual }}
+              simulacionVisual={{ escenarioId: escenarioVisualId, intensidad: intensidadVisual, flujos: flujosModelo }}
               evolucionTemporal={{
                 reproduciendo: reproduciendoSimulacion,
                 hora: horaSimulacion,
@@ -834,7 +859,8 @@ export default function App() {
                 escenarioId: escenarioVisualId,
                 escenarioNombre: escenarioActual.nombre,
                 hora: horaSimulacion,
-                intensidad: intensidadVisual
+                intensidad: intensidadVisual,
+                flujos: flujosModelo,
             }}
             rutasDesvio={resultadoSimulacion.rutasOptimizadas}
             nivelVisualizacion={nivelVisualizacion}
@@ -1009,6 +1035,15 @@ export default function App() {
                     >
                       <div className="font-bold text-xs flex items-center justify-between">
                         <span>{esc.nombre}</span>
+                        {isSessionScenarioId(esc.id) && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleEliminarEscenarioSesion(esc.id); }}
+                            title="Quitar de mi panel"
+                            className="ml-auto mr-1 rounded px-1 text-[10px] font-bold text-slate-400 hover:bg-red-100 hover:text-red-600"
+                          >
+                            ✕
+                          </button>
+                        )}
                         {esc.factorAfluencia > 1 && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-bold font-mono">
                             +{Math.round((esc.factorAfluencia - 1) * 100)}%
@@ -1562,7 +1597,6 @@ export default function App() {
           setTipoMapaCalor('afluencia');
           setCapasActivas({ zonas: true, calor: true, recursos: true, sensores: true, rutas: true });
         }}
-        onOpenStudioFromScratch={() => setModalEditorEscenariosAbierto(true)}
       />
 
       {/* Modal de Repositorio de Datos Abiertos (Iteración 10) */}
