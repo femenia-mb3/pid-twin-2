@@ -406,11 +406,10 @@ export const Real3DTilesViewer = forwardRef<Real3DTilesViewerHandle, Real3DTiles
       });
     });
 
-    // Sensores IoT (en Analítica, solo el icono)
+    // Sensores IoT: solo el icono, sin etiqueta
     sensoresRef.current.forEach((sensor) => {
       const [lat, lng] = sensor.ubicacion;
       const estado = sensor.estadoSimulado ?? sensor.estado;
-      const valor = sensor.valorSimulado ?? sensor.valorActual;
       const visual = sensorVisual(sensor);
       add({
         name: sensor.nombre,
@@ -420,17 +419,6 @@ export const Real3DTilesViewer = forwardRef<Real3DTilesViewerHandle, Real3DTiles
           width: 28,
           height: 28,
           verticalOrigin: VerticalOrigin.CENTER,
-        },
-        label: analytics4D ? undefined : {
-          text: `${valor} ${sensor.unidad}`,
-          font: '600 10px sans-serif',
-          fillColor: Color.fromCssColorString('#1e293b'),
-          outlineColor: Color.WHITE,
-          outlineWidth: 3,
-          style: LabelStyle.FILL_AND_OUTLINE,
-          horizontalOrigin: HorizontalOrigin.LEFT,
-          verticalOrigin: VerticalOrigin.CENTER,
-          pixelOffset: new Cartesian2(16, 0),
         },
       });
     });
