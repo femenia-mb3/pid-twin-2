@@ -1,0 +1,38 @@
+{
+  "destino": "Malaga",
+  "ambito": "Nucleo urbano ampliado",
+  "crs_procesamiento": "EPSG:25830",
+  "extension_procesamiento": [372000, 4062800, 376700, 4066450],
+  "edificios": {
+    "fuente": "Direccion General del Catastro - INSPIRE Buildings",
+    "municipio": "Malaga",
+    "codigo": "29900",
+    "archivo_origen": "A.ES.SDGC.BU.29900.zip",
+    "capa": "BuildingPart",
+    "elementos": 9192,
+    "salida_web": "malaga-urbana-building-parts.geojson",
+    "salida_web_rgb_lidar": "malaga-urbana-building-parts-lidar-color.geojson",
+    "color_lidar": {
+      "metodo": "Mediana RGB de puntos LAS clasificados como edificio (clase 6) dentro de cada huella",
+      "archivos_lidar": ["PNOA_2024_AND_373-4064_H30_NPC02.LAZ", "PNOA_2024_AND_373-4065_H30_NPC02.LAZ"],
+      "puntos_leidos": 11434965,
+      "puntos_coincidentes": 1375155,
+      "edificios_con_color": 1956,
+      "cobertura_pct": 21.3
+    }
+  },
+  "terreno": {
+    "fuente": "PNOA-LiDAR / CNIG",
+    "producto": "MDT50cm tercera cobertura V1",
+    "teselas_origen": ["1053-3-6", "1053-3-7"],
+    "resolucion_m": 0.5,
+    "salida_analitica": "data/terrain/malaga/processed/malaga-urbana-mdt50-cob3-v1.tif",
+    "salida_web": "malaga-urbana-hillshade.png"
+  },
+  "notas": [
+    "La altura mostrada para edificios es una estimacion analitica de 3 metros por planta.",
+    "El MDT representa el terreno; no sustituye a un MDS ni a una malla 3D de edificios.",
+    "El color LiDAR cubre 1.956 edificios; el resto usa tonos neutros hasta incorporar teselas LAZ adyacentes.",
+    "Los datos de la interfaz se recortan al ambito piloto para mantener una carga web razonable."
+  ]
+}

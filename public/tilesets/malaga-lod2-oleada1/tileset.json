@@ -1,0 +1,79 @@
+{
+  "asset": {
+    "version": "1.1",
+    "generator": "PID SEGITTUR - Pipeline LOD2 CityJSON / 3D Tiles v1.1"
+  },
+  "geometricError": 64.0,
+  "root": {
+    "boundingVolume": {
+      "region": [
+        -0.0772,
+        0.6408,
+        -0.0769,
+        0.6410,
+        0.0,
+        120.0
+      ]
+    },
+    "geometricError": 16.0,
+    "refine": "REPLACE",
+    "children": [
+      {
+        "boundingVolume": {
+          "box": [
+            -4.4199, 36.7202, 50.0,
+            60.0, 0.0, 0.0,
+            0.0, 60.0, 0.0,
+            0.0, 0.0, 45.0
+          ]
+        },
+        "geometricError": 0.0,
+        "content": {
+          "uri": "content/catedral_lod2.glb"
+        }
+      },
+      {
+        "boundingVolume": {
+          "box": [
+            -4.4158, 36.7214, 40.0,
+            80.0, 0.0, 0.0,
+            0.0, 80.0, 0.0,
+            0.0, 0.0, 30.0
+          ]
+        },
+        "geometricError": 0.0,
+        "content": {
+          "uri": "content/alcazaba_lod2.glb"
+        }
+      },
+      {
+        "boundingVolume": {
+          "box": [
+            -4.4184, 36.7223, 20.0,
+            40.0, 0.0, 0.0,
+            0.0, 40.0, 0.0,
+            0.0, 0.0, 15.0
+          ]
+        },
+        "geometricError": 0.0,
+        "content": {
+          "uri": "content/picasso_lod2.glb"
+        }
+      },
+      {
+        "boundingVolume": {
+          "box": [
+            -4.4132, 36.7181, 15.0,
+            40.0, 0.0, 0.0,
+            0.0, 40.0, 0.0,
+            0.0, 0.0, 12.0
+          ]
+        },
+        "geometricError": 0.0,
+        "content": {
+          "uri": "content/pompidou_lod2.glb"
+        }
+      }
+    ]
+  }
+}

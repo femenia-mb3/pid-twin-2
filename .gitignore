@@ -1,0 +1,13 @@
+node_modules
+dist
+.DS_Store
+*.log
+*.tsbuildinfo
+
+# Datos pesados descargados (se excluyen de Git; se reconstruyen con scripts)
+data/lidar/
+tools/ptiler
+
+.env
+.env.*
+!.env.example

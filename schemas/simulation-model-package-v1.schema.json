@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pid.segittur.es/schemas/simulation-model-package-v1.json",
+  "title": "SimulationModelPackageV1",
+  "description": "Estándar declarativo seguro para paquetes de modelos de simulación turística PID/SEGITTUR",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "id",
+    "version",
+    "name",
+    "domain",
+    "summary",
+    "creatorDestinationId",
+    "creatorDestinationName",
+    "lifecycleState",
+    "requiredLanes",
+    "pidModulesRequired",
+    "variables",
+    "sourceRequirements",
+    "declarativeRules",
+    "outputIndicators",
+    "privacyPolicy",
+    "evidence"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "simulation-model-package-v1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]{4,64}$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 4,
+      "maxLength": 100
+    },
+    "domain": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 80
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 1000
+    },
+    "creatorDestinationId": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 50
+    },
+    "creatorDestinationName": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 120
+    },
+    "lifecycleState": {
+      "type": "string",
+      "enum": ["BORRADOR", "VALIDADO", "PUBLICADO_REUTILIZABLE", "ARCHIVADO"]
+    },
+    "requiredLanes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": ["ONTOLOGICO", "NO_ONTOLOGICO_HISTORICO"]
+      }
+    },
+    "pidModulesRequired": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": ["S1", "S2", "C4", "S7", "S11", "S15", "S16", "S17", "S18"]
+      }
+    },
+    "variables": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "defaultValue", "valueType", "required"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-zA-Z0-9_]{2,40}$" },
+          "label": { "type": "string", "minLength": 2, "maxLength": 100 },
+          "unit": { "type": "string", "maxLength": 20 },
+          "defaultValue": { "type": ["number", "string", "boolean"] },
+          "valueType": { "type": "string", "enum": ["number", "string", "boolean"] },
+          "min": { "type": "number" },
+          "max": { "type": "number" },
+          "allowedValues": { "type": "array", "items": { "type": "string" } },
+          "required": { "type": "boolean" },
+          "description": { "type": "string", "maxLength": 500 }
+        }
+      }
+    },
+    "sourceRequirements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["lane", "concept", "minimumFrequency", "recommendedFormat", "mandatory"],
+        "additionalProperties": false,
+        "properties": {
+          "lane": { "type": "string", "enum": ["ONTOLOGICO", "NO_ONTOLOGICO_HISTORICO"] },
+          "concept": { "type": "string", "minLength": 2, "maxLength": 100 },
+          "minimumFrequency": { "type": "string", "maxLength": 50 },
+          "recommendedFormat": { "type": "string", "maxLength": 50 },
+          "mandatory": { "type": "boolean" }
+        }
+      }
+    },
+    "declarativeRules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["ruleId", "name", "conditionDescription", "impactVariable", "operator", "value", "evidenceNotes"],
+        "additionalProperties": false,
+        "properties": {
+          "ruleId": { "type": "string", "pattern": "^[a-zA-Z0-9_]{2,40}$" },
+          "name": { "type": "string", "minLength": 2, "maxLength": 100 },
+          "conditionDescription": { "type": "string", "maxLength": 300 },
+          "impactVariable": { "type": "string", "maxLength": 60 },
+          "operator": { "type": "string", "enum": ["MULTIPLY", "ADD", "SET", "CAP_AT"] },
+          "value": { "type": "number" },
+          "evidenceNotes": { "type": "string", "maxLength": 500 }
+        }
+      }
+    },
+    "outputIndicators": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "unit", "category", "targetEntity", "formulaSummary"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-zA-Z0-9_]{2,40}$" },
+          "label": { "type": "string", "minLength": 2, "maxLength": 100 },
+          "unit": { "type": "string", "maxLength": 20 },
+          "category": { "type": "string", "enum": ["AFORO", "SATURACION", "MOVILIDAD", "MEDIOAMBIENTE", "ECONOMIA"] },
+          "targetEntity": { "type": "string", "enum": ["ZONA", "RECURSO", "DESTINO_GLOBAL"] },
+          "formulaSummary": { "type": "string", "maxLength": 300 }
+        }
+      }
+    },
+    "privacyPolicy": {
+      "type": "object",
+      "required": ["privacyLevel", "allowsCrossDestinationUse", "dataMinimizationRule"],
+      "additionalProperties": false,
+      "properties": {
+        "privacyLevel": { "type": "string", "enum": ["PUBLICO", "INTERNO_AGREGADO", "REQUIERE_EVALUACION"] },
+        "allowsCrossDestinationUse": { "type": "boolean" },
+        "dataMinimizationRule": { "type": "string", "maxLength": 500 }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["origin", "responsibleAuthor", "license", "validationMethod", "reviewedAt"],
+      "additionalProperties": false,
+      "properties": {
+        "origin": { "type": "string", "maxLength": 200 },
+        "responsibleAuthor": { "type": "string", "maxLength": 120 },
+        "license": { "type": "string", "maxLength": 100 },
+        "validationMethod": { "type": "string", "maxLength": 200 },
+        "reviewedAt": { "type": "string" },
+        "packageFingerprintSha256": { "type": "string" }
+      }
+    }
+  }
+}

@@ -1,0 +1,96 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix pid: <urn:pid:gemelo:ontology:> .
+@prefix estur: <https://ontologia.segittur.es/turismo/def/core#> .
+@prefix ngsi: <https://uri.etsi.org/ngsi-ld/> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix schema: <https://schema.org/> .
+
+# Estas formas apuntan a las IRIs que expande el contexto JSON-LD publicado.
+# Las extensiones operativas siguen el namespace pid:.
+
+pid:DestinationProfileShape
+  a sh:NodeShape ;
+  sh:targetClass pid:DestinationProfile ;
+  sh:property [ sh:path pid:tenant ; sh:minCount 1 ; sh:class schema:Organization ] ;
+  sh:property [ sh:path pid:namespace ; sh:minCount 1 ; sh:datatype xsd:anyURI ] ;
+  sh:property [ sh:path pid:timezone ; sh:minCount 1 ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path pid:spatialLevel ; sh:minCount 1 ; sh:datatype xsd:string ] .
+
+pid:TouristDestinationShape
+  a sh:NodeShape ;
+  sh:targetClass estur:TouristDestination ;
+  sh:property [ sh:path pid:ineCode ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minLength 5 ] ;
+  sh:property [ sh:path schema:name ; sh:minCount 1 ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path ngsi:location ; sh:minCount 1 ] .
+
+pid:TourismZoneShape
+  a sh:NodeShape ;
+  sh:targetClass pid:TourismZone ;
+  sh:property [ sh:path pid:destination ; sh:minCount 1 ; sh:class estur:TouristDestination ] ;
+  sh:property [ sh:path ngsi:location ; sh:minCount 1 ] ;
+  sh:property [ sh:path pid:capacityLoad ; sh:minCount 1 ; sh:datatype xsd:decimal ; sh:minInclusive 0 ; sh:maxInclusive 150 ] ;
+  sh:property [ sh:path prov:wasDerivedFrom ; sh:minCount 1 ; sh:class pid:DataSource ] .
+
+pid:TourismResourceShape
+  a sh:NodeShape ;
+  sh:targetClass estur:TouristEntity ;
+  sh:property [ sh:path pid:destination ; sh:minCount 1 ; sh:class estur:TouristDestination ] ;
+  sh:property [ sh:path schema:name ; sh:minCount 1 ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path ngsi:location ; sh:minCount 1 ] ;
+  sh:property [ sh:path prov:wasDerivedFrom ; sh:minCount 1 ; sh:class pid:DataSource ] .
+
+pid:TourismSensorShape
+  a sh:NodeShape ;
+  sh:targetClass pid:TourismSensor ;
+  sh:property [ sh:path pid:destination ; sh:minCount 1 ; sh:class estur:TouristDestination ] ;
+  sh:property [ sh:path pid:sensorType ; sh:minCount 1 ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path pid:measurement ; sh:minCount 1 ; sh:datatype xsd:decimal ] ;
+  sh:property [ sh:path ngsi:observedAt ; sh:minCount 1 ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path prov:wasDerivedFrom ; sh:minCount 1 ; sh:class pid:DataSource ] .
+
+pid:TourismEventShape
+  a sh:NodeShape ;
+  sh:targetClass estur:Event ;
+  sh:property [ sh:path pid:destination ; sh:minCount 1 ; sh:class estur:TouristDestination ] ;
+  sh:property [ sh:path schema:name ; sh:minCount 1 ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path ngsi:location ; sh:minCount 1 ] .
+
+pid:SimulationScenarioShape
+  a sh:NodeShape ;
+  sh:targetClass pid:SimulationScenario ;
+  sh:property [ sh:path pid:destination ; sh:minCount 1 ; sh:class estur:TouristDestination ] ;
+  sh:property [ sh:path pid:scenarioType ; sh:minCount 1 ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path pid:scenarioParameters ; sh:minCount 1 ] .
+
+pid:SimulationResultShape
+  a sh:NodeShape ;
+  sh:targetClass pid:SimulationResult ;
+  sh:property [ sh:path pid:destination ; sh:minCount 1 ; sh:class estur:TouristDestination ] ;
+  sh:property [ sh:path pid:hasScenario ; sh:minCount 1 ; sh:class pid:SimulationScenario ] ;
+  sh:property [ sh:path ngsi:observedAt ; sh:minCount 1 ; sh:datatype xsd:dateTime ] .
+
+pid:Dataset3DShape
+  a sh:NodeShape ;
+  sh:targetClass pid:Dataset3D ;
+  sh:property [ sh:path pid:destination ; sh:minCount 1 ; sh:class estur:TouristDestination ] ;
+  sh:property [ sh:path ngsi:location ; sh:minCount 1 ] ;
+  sh:property [ sh:path pid:checksum ; sh:minCount 1 ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path dcterms:hasVersion ; sh:minCount 1 ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path dcterms:license ; sh:minCount 1 ] .
+
+pid:DataSourceShape
+  a sh:NodeShape ;
+  sh:targetClass pid:DataSource ;
+  sh:property [ sh:path pid:destination ; sh:minCount 1 ; sh:class estur:TouristDestination ] ;
+  sh:property [ sh:path schema:name ; sh:minCount 1 ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path pid:dataQuality ; sh:minCount 1 ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path pid:updateFrequency ; sh:minCount 1 ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path pid:traceabilityId ; sh:minCount 1 ; sh:datatype xsd:string ] .
+
+pid:IngestionContractShape
+  a sh:NodeShape ;
+  sh:targetClass pid:IngestionContract ;
+  sh:property [ sh:path pid:destination ; sh:minCount 1 ; sh:class estur:TouristDestination ] ;
+  sh:property [ sh:path pid:hasSource ; sh:minCount 1 ; sh:class pid:DataSource ] .

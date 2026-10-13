@@ -1,0 +1,77 @@
+version: '3.8'
+
+# ==============================================================================
+# PILOTO PERSISTENTE GEMELO DIGITAL TURÍSTICO (SEGITTUR PID)
+# Infraestructura: PostgreSQL/PostGIS + GeoServer + Tegola MVT + Node App
+# ==============================================================================
+
+services:
+  # 1. Base de datos espacial PostGIS
+  postgis:
+    image: postgis/postgis:16-3.4
+    container_name: gemelotur_postgis
+    environment:
+      POSTGRES_DB: gemelotur_db
+      POSTGRES_USER: segittur_admin
+      POSTGRES_PASSWORD: SegitturPassword2026!
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgis_data:/var/lib/postgresql/data
+      - ./schema_postgis.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./migrations/002_fase2_datasets_3d.sql:/docker-entrypoint-initdb.d/02_fase2_datasets_3d.sql:ro
+      - ./migrations/003_ontologia_multidestino.sql:/docker-entrypoint-initdb.d/03_ontologia_multidestino.sql:ro
+      - ./migrations/004_interoperabilidad_modelos.sql:/docker-entrypoint-initdb.d/04_interoperabilidad_modelos.sql:ro
+      - ./migrations/005_context_packages.sql:/docker-entrypoint-initdb.d/05_context_packages.sql:ro
+      - ./migrations/006_editor_escenarios.sql:/docker-entrypoint-initdb.d/06_editor_escenarios.sql:ro
+      - ./migrations/007_simulation_runs.sql:/docker-entrypoint-initdb.d/07_simulation_runs.sql:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U segittur_admin -d gemelotur_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 2. Servidor Geoespacial GeoServer (WMS, WFS, WMTS, OGC API)
+  geoserver:
+    image: kartoza/geoserver:2.25.0
+    container_name: gemelotur_geoserver
+    environment:
+      GEOSERVER_ADMIN_USER: admin
+      GEOSERVER_ADMIN_PASSWORD: geoserver_password
+      INITIAL_MEMORY: 2G
+      MAXIMUM_MEMORY: 4G
+      STABLE_EXTENSIONS: "vectortiles-plugin,ogcapi-plugin"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgis:
+        condition: service_healthy
+    volumes:
+      - geoserver_data:/opt/geoserver/data_dir
+    restart: unless-stopped
+
+  # 3. Aplicación Gemelo Digital Turístico (Backend + Visor Web)
+  gemelotur_app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: gemelotur_app
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://segittur_admin:SegitturPassword2026!@postgis:5432/gemelotur_db
+      GEOSERVER_URL: http://geoserver:8080/geoserver
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgis_data:
+    name: gemelotur_postgis_volume
+  geoserver_data:
+    name: gemelotur_geoserver_volume

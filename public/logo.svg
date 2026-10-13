@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" fill="#0B1120" />
+  <circle cx="256" cy="256" r="210" fill="none" stroke="#1E293B" stroke-width="4" stroke-dasharray="8 8" />
+  <circle cx="256" cy="256" r="160" fill="none" stroke="#0E7490" stroke-width="2" opacity="0.6" />
+  <path d="M128 256 L256 128 L384 256 L256 384 Z" fill="none" stroke="#38BDF8" stroke-width="4" opacity="0.5" />
+  <!-- Isotipo Pin y Gemelo Digital -->
+  <path d="M256 110 C206.3 110 166 150.3 166 200 C166 260 256 370 256 370 C256 370 346 260 346 200 C346 150.3 305.7 110 256 110 Z" fill="#DC2626" />
+  <circle cx="256" cy="195" r="38" fill="#FFFFFF" />
+  <circle cx="256" cy="195" r="22" fill="#0B1120" />
+  <!-- Ondas digitales gemelo -->
+  <path d="M200 410 Q 256 390 312 410" stroke="#38BDF8" stroke-width="6" stroke-linecap="round" fill="none" />
+  <path d="M160 435 Q 256 405 352 435" stroke="#0284C7" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.7" />
+  <path d="M120 460 Q 256 420 392 460" stroke="#0369A1" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.4" />
+</svg>

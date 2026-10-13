@@ -1,0 +1,100 @@
+@prefix pid: <urn:pid:gemelo:ontology:> .
+@prefix estur: <https://ontologia.segittur.es/turismo/def/core#> .
+@prefix ngsi: <https://uri.etsi.org/ngsi-ld/> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix schema: <https://schema.org/> .
+@prefix geo: <http://www.opengis.net/ont/geosparql#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<urn:pid:gemelo:profile:segittur-multidestino:v1>
+  a owl:Ontology ;
+  dcterms:title "Perfil multidestino del Gemelo Digital Turístico alineado con SEGITTUR"@es ;
+  dcterms:description "Perfil de implementación para intercambio NGSI-LD. Reutiliza el vocabulario público de la Red de Ontologías del Sector Turístico de SEGITTUR cuando corresponde y define extensiones operativas para gemelo, geografía, simulación, procedencia y 3D."@es ;
+  dcterms:source <https://ontologia.segittur.es/turismo/def/core> ;
+  dcterms:hasVersion "1.0.0" ;
+  dcterms:issued "2026-09-29"^^xsd:date .
+
+# Entidades de destino y configuración por tenant.
+pid:DestinationProfile a owl:Class ;
+  rdfs:label "Perfil semántico de destino"@es ;
+  rdfs:comment "Configura el namespace, tenant, huso horario, nivel espacial y políticas aplicables a un destino."@es .
+
+pid:TouristDestination a owl:Class ;
+  rdfs:label "Destino turístico"@es ;
+  rdfs:subClassOf estur:TouristDestination, schema:Place ;
+  rdfs:comment "Identidad administrativa o analítica de un destino dentro del modelo multidestino."@es .
+
+pid:TourismZone a owl:Class ;
+  rdfs:label "Zona turística operativa"@es ;
+  rdfs:subClassOf schema:Place ;
+  rdfs:comment "Polígono operativo sobre el que se miden afluencia, capacidad de carga, alertas y medidas de intervención."@es .
+
+pid:TourismResource a owl:Class ;
+  rdfs:label "Recurso turístico"@es ;
+  rdfs:subClassOf estur:TouristEntity, schema:TouristAttraction .
+
+pid:TourismEvent a owl:Class ;
+  rdfs:label "Evento turístico"@es ;
+  rdfs:subClassOf estur:Event, schema:Event .
+
+pid:TourismSensor a owl:Class ;
+  rdfs:label "Sensor turístico o territorial"@es ;
+  rdfs:subClassOf schema:Observation .
+
+pid:SimulationScenario a owl:Class ;
+  rdfs:label "Escenario de simulación"@es ;
+  rdfs:comment "Hipótesis versionada que altera flujos, capacidad, accesos o condiciones ambientales."@es .
+
+pid:SimulationResult a owl:Class ;
+  rdfs:label "Resultado de simulación"@es ;
+  rdfs:comment "Resultado trazable de un escenario sobre zonas, recursos, rutas y KPIs."@es .
+
+pid:Dataset3D a owl:Class ;
+  rdfs:label "Dataset tridimensional"@es ;
+  rdfs:comment "Catálogo versionado de LiDAR, LOD2, MDT/MDS o malla fotogramétrica publicado mediante OGC 3D Tiles."@es .
+
+pid:DataSource a owl:Class ;
+  rdfs:label "Fuente de datos"@es ;
+  rdfs:subClassOf prov:Entity ;
+  rdfs:comment "Fuente o sistema que aporta observaciones, datos espaciales o información turística."@es .
+
+pid:IngestionContract a owl:Class ;
+  rdfs:label "Contrato de ingestión"@es ;
+  rdfs:comment "Mapeo versionado entre una fuente de origen y el perfil NGSI-LD del gemelo."@es .
+
+# Relaciones fundamentales.
+pid:destination a owl:ObjectProperty ;
+  rdfs:domain [ a owl:Class ; owl:unionOf ( pid:TourismZone pid:TourismResource pid:TourismSensor pid:TourismEvent pid:SimulationScenario pid:Dataset3D ) ] ;
+  rdfs:range pid:TouristDestination ;
+  rdfs:label "pertenece al destino"@es .
+
+pid:tenant a owl:ObjectProperty ;
+  rdfs:domain pid:DestinationProfile ;
+  rdfs:range schema:Organization ;
+  rdfs:label "se opera por tenant"@es .
+
+pid:hasZone a owl:ObjectProperty ; rdfs:domain pid:TouristDestination ; rdfs:range pid:TourismZone .
+pid:hasResource a owl:ObjectProperty ; rdfs:domain pid:TouristDestination ; rdfs:range pid:TourismResource .
+pid:hasDataset a owl:ObjectProperty ; rdfs:domain pid:TouristDestination ; rdfs:range pid:Dataset3D .
+pid:hasScenario a owl:ObjectProperty ; rdfs:domain pid:TouristDestination ; rdfs:range pid:SimulationScenario .
+pid:hasSource a owl:ObjectProperty ; rdfs:subPropertyOf prov:wasDerivedFrom ; rdfs:range pid:DataSource .
+pid:hasIngestionContract a owl:ObjectProperty ; rdfs:domain pid:TouristDestination ; rdfs:range pid:IngestionContract .
+
+# Datos y gobernanza.
+pid:ineCode a owl:DatatypeProperty ; rdfs:domain pid:TouristDestination ; rdfs:range xsd:string .
+pid:namespace a owl:DatatypeProperty ; rdfs:domain pid:DestinationProfile ; rdfs:range xsd:anyURI .
+pid:timezone a owl:DatatypeProperty ; rdfs:domain pid:DestinationProfile ; rdfs:range xsd:string .
+pid:spatialLevel a owl:DatatypeProperty ; rdfs:domain pid:DestinationProfile ; rdfs:range xsd:string .
+pid:capacityLoad a owl:DatatypeProperty ; rdfs:domain pid:TourismZone ; rdfs:range xsd:decimal .
+pid:currentFlow a owl:DatatypeProperty ; rdfs:domain pid:TourismZone ; rdfs:range xsd:integer .
+pid:visitorCount a owl:DatatypeProperty ; rdfs:domain pid:TourismResource ; rdfs:range xsd:integer .
+pid:sensorType a owl:DatatypeProperty ; rdfs:domain pid:TourismSensor ; rdfs:range xsd:string .
+pid:measurement a owl:DatatypeProperty ; rdfs:domain pid:TourismSensor ; rdfs:range xsd:decimal .
+pid:dataQuality a owl:DatatypeProperty ; rdfs:range xsd:string .
+pid:updateFrequency a owl:DatatypeProperty ; rdfs:range xsd:string .
+pid:traceabilityId a owl:DatatypeProperty ; rdfs:range xsd:string .
+pid:policy a owl:DatatypeProperty ; rdfs:domain pid:DestinationProfile ; rdfs:range xsd:string .
+pid:checksum a owl:DatatypeProperty ; rdfs:domain pid:Dataset3D ; rdfs:range xsd:string .

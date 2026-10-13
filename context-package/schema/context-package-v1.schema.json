@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gemelo.pid.segittur.es/schemas/context-package/v1",
+  "title": "ContextPackage v1 — Gemelo Digital Turístico PID SEGITTUR",
+  "description": "Contrato de contexto versionado para incorporar un destino al Gemelo Digital Turístico multidestino.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "schemaVersion", "id", "title", "purpose", "createdAt", "tenant", "destination", "context", "semanticMapping", "evidence"],
+  "properties": {
+    "type": { "const": "ContextPackage" },
+    "schemaVersion": { "const": "1.0.0" },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,80}$" },
+    "title": { "type": "string", "minLength": 5, "maxLength": 180 },
+    "purpose": { "type": "string", "minLength": 10, "maxLength": 500 },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "tenant": { "$ref": "#/$defs/tenant" },
+    "destination": { "$ref": "#/$defs/destination" },
+    "context": { "$ref": "#/$defs/context" },
+    "semanticMapping": { "$ref": "#/$defs/semanticMapping" },
+    "evidence": { "$ref": "#/$defs/evidence" }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,80}$" },
+    "coordinate": { "type": "number" },
+    "position": { "type": "array", "items": { "$ref": "#/$defs/coordinate" }, "minItems": 2, "maxItems": 2 },
+    "governance": {
+      "type": "object",
+      "required": ["fuente", "tipoFuente", "calidad", "ultimaActualizacion", "frecuenciaActualizacion", "trazabilidadId"],
+      "properties": {
+        "fuente": { "type": "string", "minLength": 2 },
+        "tipoFuente": { "enum": ["pid_turistico", "territorial_ign", "tiempo_real_iot"] },
+        "calidad": { "enum": ["A_CERTIFICADA", "B_ESTIMADA", "C_EN_VALIDACION"] },
+        "ultimaActualizacion": { "type": "string" },
+        "frecuenciaActualizacion": { "enum": ["TIEMPO_REAL", "HORARIA", "DIARIA", "MENSUAL"] },
+        "trazabilidadId": { "type": "string", "minLength": 3 }
+      }
+    },
+    "tenant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "legalName", "dataPolicy"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "legalName": { "type": "string", "minLength": 3 },
+        "dataPolicy": { "enum": ["PUBLICA", "MIXTA", "RESTRINGIDA"] }
+      }
+    },
+    "destination": {
+      "type": "object",
+      "required": ["id", "nombre", "codigoIne", "comunidadAutonoma", "centro", "zoomInicial", "poblacionCensada", "capacidadCargaMaximaTeorica", "descripcion"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "nombre": { "type": "string", "minLength": 3 },
+        "codigoIne": { "type": "string", "pattern": "^[0-9]{5}$" },
+        "comunidadAutonoma": { "type": "string", "minLength": 3 },
+        "centro": { "$ref": "#/$defs/position" },
+        "zoomInicial": { "type": "integer", "minimum": 8, "maximum": 19 },
+        "poblacionCensada": { "type": "number", "minimum": 0 },
+        "capacidadCargaMaximaTeorica": { "type": "number", "exclusiveMinimum": 0 },
+        "descripcion": { "type": "string", "minLength": 10 }
+      }
+    },
+    "dataSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "lane", "format", "updateFrequency", "dataQuality", "privacy", "authorization", "purpose", "traceabilityId"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 3 },
+        "lane": { "enum": ["ONTOLOGICO", "NO_ONTOLOGICO_HISTORICO"] },
+        "format": { "enum": ["NGSI_LD", "GEOJSON", "CSV", "REST_JSON", "MQTT", "OGC_API_FEATURES", "WMS_WFS"] },
+        "updateFrequency": { "enum": ["TIEMPO_REAL", "HORARIA", "DIARIA", "MENSUAL"] },
+        "dataQuality": { "enum": ["A_CERTIFICADA", "B_ESTIMADA", "C_EN_VALIDACION"] },
+        "privacy": { "enum": ["PUBLICO", "INTERNO", "RESTRINGIDO", "ANONIMIZADO"] },
+        "authorization": { "enum": ["AUTORIZADO", "PENDIENTE", "NO_AUTORIZADO"] },
+        "purpose": { "type": "string", "minLength": 5 },
+        "traceabilityId": { "type": "string", "minLength": 3 },
+        "endpointHint": { "type": "string" }
+      }
+    },
+    "variable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "unit", "entityType", "observed", "sourceId", "qualityRule"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "type": "string", "minLength": 3 },
+        "unit": { "type": "string", "minLength": 1 },
+        "entityType": { "enum": ["TourismZone", "TourismResource", "TourismSensor", "TourismEvent"] },
+        "observed": { "type": "boolean" },
+        "sourceId": { "$ref": "#/$defs/id" },
+        "qualityRule": { "type": "string", "minLength": 3 }
+      }
+    },
+    "modelProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "version", "enabledDomains", "activeSpatialLevel", "capacityProfile"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 3 },
+        "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$" },
+        "enabledDomains": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "activeSpatialLevel": { "enum": ["NIVEL_1_2D_25D", "NIVEL_2_EDIFICIOS", "NIVEL_3_3D_TILES"] },
+        "capacityProfile": {
+          "type": "object",
+          "required": ["alertThresholdPct", "theoreticalCapacity"],
+          "properties": {
+            "alertThresholdPct": { "type": "number", "minimum": 1, "maximum": 100 },
+            "theoreticalCapacity": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        }
+      }
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["crs", "timezone", "locale", "modelProfile", "dataSources", "variables", "zones", "resources", "sensors"],
+      "properties": {
+        "crs": { "const": "EPSG:4326" },
+        "timezone": { "type": "string", "minLength": 3 },
+        "locale": { "type": "string", "minLength": 2 },
+        "modelProfile": { "$ref": "#/$defs/modelProfile" },
+        "dataSources": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/dataSource" } },
+        "variables": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/variable" } },
+        "zones": { "type": "array", "minItems": 1, "items": { "type": "object", "required": ["id", "destinoId", "nombre", "tipoZona", "aforoMaximo", "afluenciaActual", "capacidadCargaPct", "coordenadasPoligono", "gobernanza"] } },
+        "resources": { "type": "array", "items": { "type": "object", "required": ["id", "destinoId", "nombre", "ubicacion", "aforoMaximo", "gobernanza"] } },
+        "sensors": { "type": "array", "items": { "type": "object", "required": ["id", "destinoId", "nombre", "ubicacion", "valorActual", "unidad", "gobernanza"] } }
+      }
+    },
+    "semanticMapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contextUrl", "ontologyProfile", "namespace", "entityMappings"],
+      "properties": {
+        "contextUrl": { "type": "string", "minLength": 5 },
+        "ontologyProfile": { "type": "string", "minLength": 5 },
+        "namespace": { "type": "string", "pattern": "^urn:ngsi-ld:" },
+        "entityMappings": {
+          "type": "object",
+          "required": ["destination", "zone", "resource", "sensor"],
+          "properties": {
+            "destination": { "type": "string" },
+            "zone": { "type": "string" },
+            "resource": { "type": "string" },
+            "sensor": { "type": "string" }
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["license", "cutOffDate", "coverageNote", "syntheticDemoData", "provenance"],
+      "properties": {
+        "license": { "type": "string", "minLength": 3 },
+        "cutOffDate": { "type": "string", "format": "date-time" },
+        "coverageNote": { "type": "string", "minLength": 5 },
+        "syntheticDemoData": { "type": "boolean" },
+        "provenance": { "type": "string", "minLength": 5 }
+      }
+    }
+  }
+}

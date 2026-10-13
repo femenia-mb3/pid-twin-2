@@ -1,0 +1,191 @@
+{
+  "type": "ContextPackage",
+  "schemaVersion": "1.0.0",
+  "id": "context-destino-demostrador-v1",
+  "title": "Destino Demostrador — ContextPackage v1",
+  "purpose": "Paquete sintético para demostrar el alta de un destino sin modificar el motor del Gemelo Digital Turístico PID.",
+  "createdAt": "2026-10-08T12:00:00.000Z",
+  "tenant": {
+    "id": "tenant-destino-demostrador",
+    "legalName": "Entidad Gestora del Destino Demostrador",
+    "dataPolicy": "MIXTA"
+  },
+  "destination": {
+    "id": "destino-demostrador",
+    "nombre": "Destino Demostrador (datos sintéticos)",
+    "codigoIne": "99999",
+    "comunidadAutonoma": "Entorno de demostración",
+    "centro": [40.455, -3.705],
+    "zoomInicial": 14,
+    "poblacionCensada": 45000,
+    "capacidadCargaMaximaTeorica": 12000,
+    "descripcion": "Destino ficticio de demostración para validar ContextPackage v1. No representa datos, límites ni indicadores de un municipio real."
+  },
+  "context": {
+    "crs": "EPSG:4326",
+    "timezone": "Europe/Madrid",
+    "locale": "es-ES",
+    "modelProfile": {
+      "id": "profile-destino-demostrador-v1",
+      "name": "Modelo demostrador casco histórico–corredor verde",
+      "version": "1.0.0",
+      "enabledDomains": ["turismo", "movilidad", "medio_ambiente"],
+      "activeSpatialLevel": "NIVEL_1_2D_25D",
+      "capacityProfile": {
+        "alertThresholdPct": 85,
+        "theoreticalCapacity": 12000
+      }
+    },
+    "dataSources": [
+      {
+        "id": "fuente-aforo-demo",
+        "name": "Aforo peatonal sintético",
+        "lane": "ONTOLOGICO",
+        "format": "NGSI_LD",
+        "updateFrequency": "HORARIA",
+        "dataQuality": "B_ESTIMADA",
+        "privacy": "ANONIMIZADO",
+        "authorization": "AUTORIZADO",
+        "purpose": "Demostrar la integración de aforo agregado por zona.",
+        "traceabilityId": "CTX-DEMO-AFORO-001",
+        "endpointHint": "ngsi-ld://demo/aforo"
+      },
+      {
+        "id": "fuente-cartografia-demo",
+        "name": "Cartografía de zonas sintética",
+        "lane": "NO_ONTOLOGICO_HISTORICO",
+        "format": "GEOJSON",
+        "updateFrequency": "MENSUAL",
+        "dataQuality": "C_EN_VALIDACION",
+        "privacy": "PUBLICO",
+        "authorization": "AUTORIZADO",
+        "purpose": "Demostrar la incorporación de geometrías operativas de destino.",
+        "traceabilityId": "CTX-DEMO-GEO-001"
+      }
+    ],
+    "variables": [
+      {
+        "id": "visitantes-hora",
+        "label": "Afluencia estimada por hora",
+        "unit": "P1H",
+        "entityType": "TourismZone",
+        "observed": true,
+        "sourceId": "fuente-aforo-demo",
+        "qualityRule": "valor >= 0"
+      },
+      {
+        "id": "ocupacion-zona",
+        "label": "Ocupación de capacidad",
+        "unit": "P1",
+        "entityType": "TourismZone",
+        "observed": true,
+        "sourceId": "fuente-aforo-demo",
+        "qualityRule": "valor entre 0 y 150"
+      }
+    ],
+    "zones": [
+      {
+        "id": "demo-casco",
+        "destinoId": "destino-demostrador",
+        "nombre": "Casco histórico demostrador",
+        "capa": "turismo",
+        "tipoZona": "CENTRO_HISTORICO",
+        "aforoMaximo": 5500,
+        "afluenciaActual": 3120,
+        "capacidadCargaPct": 56.7,
+        "coordenadasPoligono": [[40.458, -3.711], [40.459, -3.700], [40.451, -3.699], [40.450, -3.709]],
+        "gobernanza": {
+          "fuente": "Aforo peatonal sintético",
+          "tipoFuente": "pid_turistico",
+          "calidad": "B_ESTIMADA",
+          "ultimaActualizacion": "2026-10-08T12:00:00.000Z",
+          "frecuenciaActualizacion": "HORARIA",
+          "trazabilidadId": "CTX-DEMO-ZONA-001"
+        }
+      },
+      {
+        "id": "demo-corredor-verde",
+        "destinoId": "destino-demostrador",
+        "nombre": "Corredor verde demostrador",
+        "capa": "medio_ambiente",
+        "tipoZona": "ZONA_CULTURAL",
+        "aforoMaximo": 3200,
+        "afluenciaActual": 1180,
+        "capacidadCargaPct": 36.9,
+        "coordenadasPoligono": [[40.450, -3.711], [40.451, -3.699], [40.446, -3.697], [40.445, -3.709]],
+        "gobernanza": {
+          "fuente": "Cartografía de zonas sintética",
+          "tipoFuente": "territorial_ign",
+          "calidad": "C_EN_VALIDACION",
+          "ultimaActualizacion": "2026-10-08T12:00:00.000Z",
+          "frecuenciaActualizacion": "MENSUAL",
+          "trazabilidadId": "CTX-DEMO-ZONA-002"
+        }
+      }
+    ],
+    "resources": [
+      {
+        "id": "demo-recurso-centro",
+        "destinoId": "destino-demostrador",
+        "nombre": "Centro de interpretación demostrador",
+        "categoria": "MUSEO",
+        "capa": "turismo",
+        "ubicacion": [40.454, -3.705],
+        "aforoMaximo": 350,
+        "visitantesHora": 210,
+        "tiempoMedioVisitaMin": 45,
+        "precioMedio": 0,
+        "accesibilidadPmr": true,
+        "horario": "10:00 - 18:00",
+        "gobernanza": {
+          "fuente": "Inventario de recursos sintético",
+          "tipoFuente": "pid_turistico",
+          "calidad": "B_ESTIMADA",
+          "ultimaActualizacion": "2026-10-08T12:00:00.000Z",
+          "frecuenciaActualizacion": "MENSUAL",
+          "trazabilidadId": "CTX-DEMO-REC-001"
+        }
+      }
+    ],
+    "sensors": [
+      {
+        "id": "demo-sensor-aforo",
+        "destinoId": "destino-demostrador",
+        "tipoSensor": "CONTEO_PEATONAL",
+        "nombre": "Sensor de aforo demostrador",
+        "ubicacion": [40.454, -3.707],
+        "valorActual": 620,
+        "unidad": "peatones/h",
+        "umbralAlerta": 850,
+        "estado": "NORMAL",
+        "ultimaLectura": "Dato sintético · 12:00",
+        "gobernanza": {
+          "fuente": "Aforo peatonal sintético",
+          "tipoFuente": "tiempo_real_iot",
+          "calidad": "B_ESTIMADA",
+          "ultimaActualizacion": "2026-10-08T12:00:00.000Z",
+          "frecuenciaActualizacion": "HORARIA",
+          "trazabilidadId": "CTX-DEMO-IOT-001"
+        }
+      }
+    ]
+  },
+  "semanticMapping": {
+    "contextUrl": "/ontology/segittur-pid-context-v1.jsonld",
+    "ontologyProfile": "urn:pid:gemelo:profile:segittur-multidestino:v1",
+    "namespace": "urn:ngsi-ld:pid:destino-demostrador:",
+    "entityMappings": {
+      "destination": "TouristDestination",
+      "zone": "TourismZone",
+      "resource": "TourismResource",
+      "sensor": "TourismSensor"
+    }
+  },
+  "evidence": {
+    "license": "Datos sintéticos de demostración — no reutilizables como dato municipal",
+    "cutOffDate": "2026-10-08T12:00:00.000Z",
+    "coverageNote": "Cobertura ficticia para probar el flujo completo de alta de destino.",
+    "syntheticDemoData": true,
+    "provenance": "Paquete de referencia creado para la demostración ContextPackage v1 del Gemelo Digital Turístico PID."
+  }
+}

@@ -1,0 +1,197 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+    background-color: #ffffff;
+    color: #1f2937;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Tema PID claro: convierte el control room oscuro en una interfaz limpia      */
+/* y luminosa, conservando los acentos semánticos de situación/alerta.         */
+/* -------------------------------------------------------------------------- */
+.pid-light {
+  --pid-ink: #1f2937;
+  --pid-muted: #64748b;
+  --pid-border: #e2e8f0;
+  --pid-surface: #ffffff;
+  --pid-surface-soft: #f8fafc;
+  background: #ffffff;
+  color: var(--pid-ink);
+}
+
+.pid-light [class*="bg-slate-950"]:not([class*="text-white"]),
+.pid-light [class*="bg-slate-900"]:not([class*="text-white"]) {
+  background-color: #ffffff !important;
+}
+
+.pid-light [class*="bg-slate-800"]:not([class*="text-white"]),
+.pid-light [class*="bg-slate-700"]:not([class*="text-white"]) {
+  background-color: #f8fafc !important;
+}
+
+.pid-light [class*="bg-black"] {
+  background-color: rgba(255, 255, 255, 0.90) !important;
+}
+
+.pid-light [class*="bg-red-950"] {
+  background-color: #fff1f2 !important;
+}
+
+.pid-light [class*="bg-amber-950"] {
+  background-color: #fffbeb !important;
+}
+
+.pid-light [class*="bg-sky-950"] {
+  background-color: #f0f9ff !important;
+}
+
+.pid-light [class*="bg-emerald-950"] {
+  background-color: #ecfdf5 !important;
+}
+
+.pid-light [class*="border-slate-"] {
+  border-color: var(--pid-border) !important;
+}
+
+.pid-light [class*="text-slate-100"],
+.pid-light [class*="text-slate-200"],
+.pid-light [class*="text-slate-300"] {
+  color: var(--pid-ink) !important;
+}
+
+.pid-light [class*="text-slate-400"] {
+  color: var(--pid-muted) !important;
+}
+
+.pid-light [class*="hover:text-slate-200"]:hover,
+.pid-light [class*="hover:text-white"]:hover {
+  color: #be185d !important;
+}
+
+.pid-light [class*="shadow-2xl"],
+.pid-light [class*="shadow-xl"] {
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.09) !important;
+}
+
+.pid-light input[type="range"] {
+  background-color: #e2e8f0 !important;
+}
+
+/* Scrollbars claros */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f8fafc;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Leaflet en modo luminoso */
+.leaflet-container {
+  background: #f8fafc !important;
+  font-family: inherit !important;
+}
+
+.leaflet-popup-content-wrapper {
+  background: #ffffff !important;
+  color: #1f2937 !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 10px !important;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16) !important;
+}
+
+.leaflet-popup-tip {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+.leaflet-tooltip,
+.leaflet-light-tooltip {
+  background: #ffffff !important;
+  color: #1f2937 !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 6px !important;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12) !important;
+}
+
+.leaflet-control-zoom a {
+  background: #ffffff !important;
+  color: #475569 !important;
+  border-color: #e2e8f0 !important;
+}
+
+.leaflet-control-zoom a:hover {
+  color: #be185d !important;
+  background: #fdf2f8 !important;
+}
+
+/* Escenarios simulados: dirección del flujo, destinos pulsantes y lluvia. */
+.simulation-flow-path {
+  animation: simulation-flow-dash 1.15s linear infinite;
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.85));
+}
+
+@keyframes simulation-flow-dash {
+  to { stroke-dashoffset: -30; }
+}
+
+.simulation-pulse-icon {
+  background: transparent;
+  border: 0;
+}
+
+.simulation-pulse {
+  display: block;
+  width: 30px;
+  height: 30px;
+  border: 3px solid var(--simulation-color);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--simulation-color) 32%, transparent);
+  opacity: var(--simulation-opacity);
+  box-shadow: 0 0 0 0 var(--simulation-color);
+  animation: simulation-pulse 1.45s ease-out infinite;
+}
+
+@keyframes simulation-pulse {
+  0% { transform: scale(0.55); box-shadow: 0 0 0 0 var(--simulation-color); }
+  75%, 100% { transform: scale(1.08); box-shadow: 0 0 0 16px transparent; }
+}
+
+.simulation-rain-overlay {
+  overflow: hidden;
+  background-image: repeating-linear-gradient(108deg, transparent 0 18px, rgba(2, 132, 199, 0.7) 19px 21px, transparent 22px 38px);
+  background-size: 180px 180px;
+  mix-blend-mode: multiply;
+  animation: simulation-rain 0.75s linear infinite;
+}
+
+@keyframes simulation-rain {
+  from { background-position: 0 -180px; }
+  to { background-position: -55px 180px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .simulation-flow-path,
+  .simulation-pulse,
+  .simulation-rain-overlay {
+    animation: none;
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "type": "CombinedStressValidationResult",
+  "testData": true,
+  "externalActionPerformed": false,
+  "scenario": "COLAPSO_EVENTO_EXTRAORDINARIO",
+  "runTag": "i15-i16-20261009T112429Z",
+  "executedAt": "2026-10-09T11:24:29Z",
+  "tenantId": "tenant_ayto_malaga",
+  "destinationId": "malaga",
+  "macroeconomic": {
+    "simulationId": "sim_macro_mv0voew2_a0n8",
+    "evidenceFingerprintSha256": "3baf970831c572f1e4503fed8d79de0ee28c8dd106a51c09d02dc7c7535fa70e",
+    "uncertaintyType": "CALIBRADA_EMPIRICA",
+    "deltaVabEuros": 5301193.04,
+    "deltaExternalitiesEuros": 83769.4
+  },
+  "territorialStress": {
+    "testId": "stress_mv0voevk_cutg",
+    "evidenceFingerprintSha256": "19585288fce2a75fedc948083710d3cc82b54735534c0889d3cc731ae44803f6",
+    "globalVerdict": "RIESGO_COLAPSO_INMINENTE",
+    "resilienceScore": {
+      "T+1": 61,
+      "T+4": 22,
+      "T+24": 46
+    }
+  },
+  "agentResponse": {
+    "incidentId": "inc_malaga_mv0voevs",
+    "severity": "ROJA_COLAPSO_INMINENTE",
+    "incidentFingerprintSha256": "fd24d0c5a39d794ea93fd73c5d98cbfc4adcfeb128eff78d98aafd6d7cffb913",
+    "planId": "plan_resp_mv0voevw",
+    "planFingerprintSha256": "2916f6d3972bacbfae4600ecaa6e70dab09be6b18a5031324d5b97ea09465dc0",
+    "planStatus": "PENDIENTE_FIRMA_HUMANA",
+    "level1AutonomousActions": 2,
+    "level2PendingHumanSignature": 2,
+    "immutableDecisionCount": 0
+  },
+  "sourceArtifactFingerprintsSha256": {
+    "macroJson": "a1971214dd7df120b76d14b6b478e46e174cdcdd19e597a6ad7292d04b2b6117",
+    "stressJson": "567c50972be97880f0741215032cdc2a06d6a6d1b1980be88a82f11d3344f16b",
+    "agentJson": "bd5b54d4745f1754e8c72e298d09cb82f666ab6fd425bb83e89f99d82a09d35c",
+    "databaseEvidenceJson": "c31ffc39b6f7d4fa4d23db2a3d1377c68e124e9e4e14f9ba1e25350add432e9d"
+  },
+  "governance": {
+    "humanApprovalRequired": true,
+    "humanApprovalPerformed": false,
+    "physicalOrExternalMeasuresTriggered": false,
+    "statement": "La prueba calcula y registra respuestas. No ha autorizado ni ejecutado medidas físicas, policiales o externas."
+  },
+  "compositeEvidenceFingerprintSha256": "e113027d6ffd8f98087e82d42981051118272303be3bf17f52736e806500fe54",
+  "elapsedMilliseconds": 47
+}

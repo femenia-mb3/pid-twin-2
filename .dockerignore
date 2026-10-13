@@ -1,0 +1,19 @@
+node_modules
+dist
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+
+# Fuentes pesadas de procesamiento. La demo usa los derivados de public/.
+data
+tools/ptiler
+
+*.log
+*.tsbuildinfo
+*.zip
+*.7z
+*.rar
+.DS_Store
+.codex*
