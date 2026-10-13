@@ -189,34 +189,16 @@
 }
 
 /* Clima activo (lluvia / ola de calor) como efecto de pantalla. */
-.weather-rain {
-  background-image: repeating-linear-gradient(104deg, transparent 0 22px, rgba(186, 230, 253, 0.55) 23px 24px, transparent 25px 46px);
-  background-size: 220px 220px;
-  opacity: 0.55;
-  animation: weather-rain-fall 0.55s linear infinite;
-}
-
-.weather-rain-far {
-  background-size: 140px 140px;
-  opacity: 0.3;
-  animation-duration: 0.9s;
-}
-
-@keyframes weather-rain-fall {
-  from { background-position: 0 -220px; }
-  to { background-position: -60px 220px; }
-}
-
 .weather-heat-tint {
   background:
-    radial-gradient(ellipse at 50% 120%, rgba(251, 146, 60, 0.38), transparent 60%),
-    radial-gradient(ellipse at center, transparent 45%, rgba(220, 38, 38, 0.28) 100%);
+    radial-gradient(ellipse at 50% 120%, rgba(251, 146, 60, 0.22), transparent 60%),
+    radial-gradient(ellipse at center, transparent 45%, rgba(220, 38, 38, 0.18) 100%);
   mix-blend-mode: multiply;
   animation: weather-heat-pulse 4s ease-in-out infinite;
 }
 
 .weather-heat-haze {
-  background-image: repeating-linear-gradient(0deg, rgba(255, 237, 213, 0.0) 0 10px, rgba(254, 215, 170, 0.22) 14px, rgba(255, 237, 213, 0.0) 20px);
+  background-image: repeating-linear-gradient(0deg, rgba(255, 237, 213, 0.0) 0 10px, rgba(254, 215, 170, 0.1) 14px, rgba(255, 237, 213, 0.0) 20px);
   background-size: 100% 40px;
   filter: blur(2px);
   animation: weather-heat-rise 2.4s linear infinite;
@@ -234,7 +216,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .weather-rain,
   .weather-heat-tint,
   .weather-heat-haze,
   .simulation-flow-path,
