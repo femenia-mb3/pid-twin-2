@@ -31,6 +31,7 @@ import { EDIFICIOS_OLEADA_1, Edificio3DRecord } from '../services/catalog3DServi
 import { OpenDataService } from '../services/openDataService';
 import { sensorMarkerDataUri, sensorVisual } from '../services/sensorVisuals';
 import { leyendaFlujoSimulacion } from '../services/simulationFlowLegend';
+import { cargarViarioPrincipal, colorCarga, construirRed } from '../services/trafficNetwork';
 import { KpiMapa, KPI_MAPA_CONFIG, clasesLeyenda, textoClase, oscurecer, coloresKpiEdificios, precalentarKpis } from '../services/kpiBuildingColors';
 import { RUTAS_CRUCERO_VIARIAS, RUTAS_EVENTO_VIARIAS } from '../data/rutasCruceroViarias';
 
@@ -241,7 +242,7 @@ export const Real3DTilesViewer = forwardRef<Real3DTilesViewerHandle, Real3DTiles
   const [buildingTwinError, setBuildingTwinError] = useState('');
   
   // Iteración 10: Datos abiertos y controles de realismo
-  const [mapaBase3D, setMapaBase3D] = useState<'ign_gris' | 'pnoa_ortofoto'>(analytics4D ? 'ign_gris' : 'pnoa_ortofoto');
+  const [mapaBase3D, setMapaBase3D] = useState<'ign_gris' | 'pnoa_ortofoto'>('ign_gris');
   const [mostrarTraficoAbierto, setMostrarTraficoAbierto] = useState<boolean>(true);
   const [iluminacionSolar, setIluminacionSolar] = useState<boolean>(!analytics4D);
   const [presetCamara, setPresetCamara] = useState<'cenital' | 'oblicua' | 'peatonal'>('oblicua');
@@ -656,7 +657,7 @@ export const Real3DTilesViewer = forwardRef<Real3DTilesViewerHandle, Real3DTiles
       credit: 'CC-BY 4.0 Instituto Geográfico Nacional',
     }));
     ignGrisLayerRef.current = ignGrisLayer;
-    ignGrisLayer.show = analytics4D;
+    ignGrisLayer.show = mapaBase3D === 'ign_gris';
 
     // Capa 2: Ortoimagen Satelital Aérea Real PNOA IGN (WMS Abierto)
     const pnoaLayer = viewer.imageryLayers.addImageryProvider(new WebMapServiceImageryProvider({
@@ -670,7 +671,7 @@ export const Real3DTilesViewer = forwardRef<Real3DTilesViewerHandle, Real3DTiles
       credit: 'CC-BY 4.0 Instituto Geográfico Nacional - PNOA',
     }));
     pnoaLayerRef.current = pnoaLayer;
-    pnoaLayer.show = !analytics4D;
+    pnoaLayer.show = mapaBase3D === 'pnoa_ortofoto';
 
     // Gemelo de edificio demostrador: permanece visible como un activo más de Málaga.
     if (!analytics4D) {
@@ -773,23 +774,43 @@ export const Real3DTilesViewer = forwardRef<Real3DTilesViewerHandle, Real3DTiles
     if (!analytics4D) {
       const trafficSource = new CustomDataSource('trafico-abierto-3d');
       trafficEntitiesRef.current = trafficSource;
-      const segments = OpenDataService.getTrafficSegments('malaga');
-      segments.forEach(seg => {
-        const color = seg.nivelCongestion === 'CONGESTIONADO' ? '#ef4444'
-                    : seg.nivelCongestion === 'DENSO' ? '#f97316'
-                    : seg.nivelCongestion === 'MODERADO' ? '#eab308'
-                    : '#10b981';
-        trafficSource.entities.add({
-          name: `Tráfico: ${seg.nombreVia}`,
-          description: `Nivel: ${seg.nivelCongestion} · Velocidad: ${seg.velocidadMediaKmh} km/h · Intensidad: ${seg.intensidadVehiculosHora} veh/h`,
-          polyline: {
-            positions: seg.coordenadas.map(([lat, lng]) => Cartesian3.fromDegrees(lng, lat, 18)),
-            width: 5,
-            material: Color.fromCssColorString(color).withAlpha(0.85),
-          }
-        });
-      });
+      trafficSource.show = mostrarTraficoAbierto;
       void viewer.dataSources.add(trafficSource);
+      // Viario principal real (OSM) con carga sintética por jerarquía, centralidad y hora.
+      void cargarViarioPrincipal().then(features => {
+        if (disposed) return;
+        const ancho: Record<string, number> = { motorway: 6, primary: 5, secondary: 3.5, motorway_link: 3, primary_link: 3 };
+        construirRed(features, new Date().getHours() + new Date().getMinutes() / 60).forEach(tramo => {
+          trafficSource.entities.add({
+            name: `Tráfico: ${tramo.nombre}`,
+            description: `Carga: ${Math.round(tramo.carga * 100)} % · Velocidad: ${tramo.velocidadKmh} km/h · Intensidad: ${tramo.vehiculosHora} veh/h · Fuente viario: © OpenStreetMap contributors (simulación calibrada)`,
+            polyline: {
+              positions: Cartesian3.fromDegreesArrayHeights(tramo.coordenadas.flatMap(([lng, lat]) => [lng, lat, 8])),
+              width: ancho[tramo.clase] ?? 3,
+              material: Color.fromCssColorString(colorCarga(tramo.carga)).withAlpha(0.9),
+            },
+          });
+        });
+        viewer.scene.requestRender();
+      }).catch(() => {
+        if (disposed) return;
+        // Respaldo: tramos de ejemplo si el viario OSM no está disponible.
+        OpenDataService.getTrafficSegments('malaga').forEach(seg => {
+          const color = seg.nivelCongestion === 'CONGESTIONADO' ? '#ef4444'
+                      : seg.nivelCongestion === 'DENSO' ? '#f97316'
+                      : seg.nivelCongestion === 'MODERADO' ? '#eab308'
+                      : '#10b981';
+          trafficSource.entities.add({
+            name: `Tráfico: ${seg.nombreVia}`,
+            polyline: {
+              positions: seg.coordenadas.map(([lat, lng]) => Cartesian3.fromDegrees(lng, lat, 18)),
+              width: 5,
+              material: Color.fromCssColorString(color).withAlpha(0.85),
+            },
+          });
+        });
+        viewer.scene.requestRender();
+      });
     }
 
     // 5. Carga progresiva: mapa base -> edificios neutros (por lotes) -> color por edificio.
@@ -1089,6 +1110,17 @@ export const Real3DTilesViewer = forwardRef<Real3DTilesViewerHandle, Real3DTiles
   return (
     <div className="relative h-full w-full overflow-hidden bg-[#e7f0f4]">
       <div ref={containerRef} className="h-full w-full" />
+
+      {/* Cambio rápido de mapa base (Base Gris IGN, como la v3, o ortofoto PNOA) */}
+      <button
+        type="button"
+        onClick={() => setMapaBase3D(v => (v === 'ign_gris' ? 'pnoa_ortofoto' : 'ign_gris'))}
+        title="Cambiar mapa base"
+        className="absolute right-14 top-2 z-10 flex items-center gap-1.5 rounded-md border border-slate-200 bg-white/95 px-2.5 py-1.5 text-[11px] font-bold text-slate-700 shadow-lg backdrop-blur hover:bg-slate-50"
+      >
+        <Layers className="h-3.5 w-3.5 text-cyan-600" />
+        {mapaBase3D === 'ign_gris' ? 'Base Gris · ver Ortofoto' : 'Ortofoto PNOA · ver Base Gris'}
+      </button>
 
       {/* Tarjeta de estado de metadatos del activo territorial */}
       {!buildingTwinOpen && <div className="absolute left-4 top-4 z-10 max-w-sm rounded-xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur">
