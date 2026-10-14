@@ -1,5 +1,7 @@
 name: ${APP_NAME:-gemelotur-demo}
 
+# Solo se publican dos puertos en el host: 3000 (web + API) y 3001 (misma aplicación, para clientes de API).
+# Cualquier servicio adicional (base de datos, GeoServer…) debe quedarse en la red interna de Docker, sin `ports`.
 services:
   app:
     image: ${APP_NAME:-gemelotur-demo}:latest
@@ -9,7 +11,9 @@ services:
       dockerfile: Dockerfile
     ports:
       - "${APP_PORT:-3000}:3000"
+      - "${API_PORT:-3001}:3001"
     restart: unless-stopped
     environment:
       NODE_ENV: production
       PORT: 3000
+      API_PORT: 3001

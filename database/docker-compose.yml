@@ -5,6 +5,9 @@ version: '3.8'
 # Infraestructura: PostgreSQL/PostGIS + GeoServer + Tegola MVT + Node App
 # ==============================================================================
 
+# Puertos publicados en el host: SOLO 3000 y 3001 (aplicación). PostGIS (5432) y GeoServer (8080)
+# no se publican: son accesibles únicamente por nombre de servicio dentro de la red de Docker.
+
 services:
   # 1. Base de datos espacial PostGIS
   postgis:
@@ -13,10 +16,10 @@ services:
     environment:
       POSTGRES_DB: gemelotur_db
       POSTGRES_USER: segittur_admin
-      POSTGRES_PASSWORD: SegitturPassword2026!
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-SegitturPassword2026!}
       PGDATA: /var/lib/postgresql/data/pgdata
-    ports:
-      - "5432:5432"
+    expose:
+      - "5432"
     volumes:
       - postgis_data:/var/lib/postgresql/data
       - ./schema_postgis.sql:/docker-entrypoint-initdb.d/01_schema.sql
@@ -39,12 +42,12 @@ services:
     container_name: gemelotur_geoserver
     environment:
       GEOSERVER_ADMIN_USER: admin
-      GEOSERVER_ADMIN_PASSWORD: geoserver_password
+      GEOSERVER_ADMIN_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD:-geoserver_password}
       INITIAL_MEMORY: 2G
       MAXIMUM_MEMORY: 4G
       STABLE_EXTENSIONS: "vectortiles-plugin,ogcapi-plugin"
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     depends_on:
       postgis:
         condition: service_healthy
@@ -61,10 +64,12 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      DATABASE_URL: postgresql://segittur_admin:SegitturPassword2026!@postgis:5432/gemelotur_db
+      API_PORT: 3001
+      DATABASE_URL: postgresql://segittur_admin:${POSTGRES_PASSWORD:-SegitturPassword2026!}@postgis:5432/gemelotur_db
       GEOSERVER_URL: http://geoserver:8080/geoserver
     ports:
       - "3000:3000"
+      - "3001:3001"
     depends_on:
       postgis:
         condition: service_healthy

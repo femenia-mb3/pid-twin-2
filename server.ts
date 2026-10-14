@@ -2827,3 +2827,15 @@ if (fs.existsSync(distPath)) {
 app.listen(Number(PORT), '0.0.0.0', () => {
   console.log(`API Gemelo Digital Turístico escuchando en http://0.0.0.0:${PORT}`);
 });
+
+// Segundo puerto con la misma aplicación (UI + API), pensado para clientes que llaman a la API directamente.
+// Con PORT=3001 (desarrollo, detrás del proxy de Vite) no hay segundo puerto.
+const API_PORT = Number(process.env.API_PORT || 3001);
+if (API_PORT && API_PORT !== Number(PORT)) {
+  const second = app.listen(API_PORT, '0.0.0.0', () => {
+    console.log(`API Gemelo Digital Turístico también en http://0.0.0.0:${API_PORT}`);
+  });
+  second.on('error', (err: NodeJS.ErrnoException) => {
+    console.warn(`No se pudo abrir el puerto adicional ${API_PORT}: ${err.code ?? err.message}`);
+  });
+}
