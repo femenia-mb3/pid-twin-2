@@ -40,6 +40,7 @@ import { ParametrosDestinoConfigurables } from './src/engine/simulationEngine';
 import { postgisClient } from './src/services/postgisClient';
 import { postgisRepository } from './src/services/postgisRepository';
 import { AiSimulationAgentService } from './src/services/aiSimulationAgentService';
+import { ContextoIndicadores, answerIndicatorQuestion, buildIndicatorPrompt } from './src/services/indicatorQa';
 import { AiPromptRequest } from './src/types/aiAgent';
 import { PilotOperationsService } from './src/services/pilotOperationsService';
 import { AiAuditDecision } from './src/types/pilotOperations';
@@ -984,6 +985,54 @@ app.get('/api/ai/capabilities', (req, res) => {
   res.set('Cache-Control', 'no-store');
   const capabilities = AiSimulationAgentService.getCapabilities(destinationId);
   return res.json(capabilities);
+});
+
+// Preguntas sobre los indicadores del destino. No requiere sesión: solo lee la instantánea que envía el cliente.
+// Con OPENAI_API_KEY responde un modelo de lenguaje limitado a ese contexto; sin ella, el motor de reglas.
+app.post('/api/ai/indicators-chat', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const question = typeof req.body?.question === 'string' ? req.body.question.trim() : '';
+  const context = req.body?.context as ContextoIndicadores | undefined;
+  if (question.length < 2 || question.length > 500) {
+    return res.status(422).json({ error: 'La pregunta debe tener entre 2 y 500 caracteres.' });
+  }
+  if (!context || !context.simulados || !context.actuales || !Array.isArray(context.zonas) || !Array.isArray(context.sensores)) {
+    return res.status(422).json({ error: 'Falta el contexto de indicadores del destino.' });
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (apiKey) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 18000);
+      const history = Array.isArray(req.body?.history) ? (req.body.history as Array<{ role: string; content: string }>).slice(-6) : [];
+      const llm = await fetch(`${process.env.OPENAI_API_BASE || 'https://api.openai.com/v1'}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: process.env.OPENAI_MODEL || 'gpt-5-mini',
+          messages: [
+            { role: 'system', content: buildIndicatorPrompt(context) },
+            ...history.filter(m => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string').map(m => ({ role: m.role, content: m.content.slice(0, 1500) })),
+            { role: 'user', content: question },
+          ],
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (llm.ok) {
+        const json = await llm.json() as any;
+        const answer = json.choices?.[0]?.message?.content;
+        if (answer) return res.json({ answer, sources: ['contexto de indicadores'], engine: 'LLM' });
+      } else {
+        console.warn(`[indicators-chat] LLM status ${llm.status}; se usa el motor de reglas.`);
+      }
+    } catch (err) {
+      console.warn('[indicators-chat] LLM no disponible; se usa el motor de reglas.', err);
+    }
+  }
+
+  return res.json({ ...answerIndicatorQuestion(question, context), engine: 'REGLAS' });
 });
 
 app.post('/api/ai/simulate-prompt', async (req, res) => {

@@ -50,7 +50,7 @@ import { ContextPackageV1 } from './types/contextPackage';
 import { ScenarioDefinition, ScenarioExecution, scenarioToRuntimeBinding } from './types/scenarioStudio';
 import { isSessionScenarioId } from './services/sessionScenarios';
 import { flujosParaEscenario } from './services/modelFlows';
-import { AiSimulationProposal } from './types/aiAgent';
+import { ContextoIndicadores } from './services/indicatorQa';
 import {
   Globe,
   Scale,
@@ -519,53 +519,32 @@ export default function App() {
     setModalEditorEscenariosAbierto(false);
   };
 
-  const handleApplyAiProposal = (proposal: AiSimulationProposal) => {
-    const syntheticScenario: ScenarioDefinition = {
-      id: `ai-gen-${Date.now()}`,
-      destinationId: destinoActual.id,
-      tenantId: tenantDestinoActual,
-      name: proposal.scenarioDraft.name,
-      description: proposal.scenarioDraft.description,
-      type: proposal.scenarioDraft.type,
-      status: 'VALIDADO',
-      version: 1,
-      createdBy: proposal.scenarioDraft.createdBy,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      executionCount: 0,
-      inputs: proposal.scenarioDraft.inputs,
-    };
-    setEscenarioEditorActivo(syntheticScenario);
-    setEscenarioSeleccionadoId(syntheticScenario.id);
-    setHoraSimulacion(proposal.scenarioDraft.inputs.hour);
-    setClima(proposal.scenarioDraft.inputs.climate);
-    setIncrementoManual(proposal.scenarioDraft.inputs.visitorVariationPct);
-    setUmbralAlerta(proposal.scenarioDraft.inputs.alertThresholdPct);
-    setReproduciendoSimulacion(false);
-    setTipoMapaCalor('afluencia');
-    setCapasActivas({ zonas: true, calor: true, recursos: true, sensores: true, rutas: true });
-    setPestañaLateral('simulador');
-  };
-
-  const handleOpenAiInStudio = (proposal: AiSimulationProposal) => {
-    const syntheticScenario: ScenarioDefinition = {
-      id: `ai-gen-${Date.now()}`,
-      destinationId: destinoActual.id,
-      tenantId: tenantDestinoActual,
-      name: proposal.scenarioDraft.name,
-      description: proposal.scenarioDraft.description,
-      type: proposal.scenarioDraft.type,
-      status: 'BORRADOR',
-      version: 1,
-      createdBy: proposal.scenarioDraft.createdBy,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      executionCount: 0,
-      inputs: proposal.scenarioDraft.inputs,
-    };
-    setEscenarioEditorActivo(syntheticScenario);
-    setModalEditorEscenariosAbierto(true);
-  };
+  // Instantánea de indicadores que consulta el asistente IA (situación actual + escenario activo).
+  const contextoIndicadores = useMemo<ContextoIndicadores>(() => ({
+    destino: destinoActual.nombre,
+    escenario: escenarioActual.nombre,
+    clima,
+    hora: horaSimulacion,
+    actuales: resultadoSimulacion.indicadoresActuales,
+    simulados: resultadoSimulacion.indicadoresSimulados,
+    zonas: resultadoSimulacion.zonasResultados.map(z => ({
+      nombre: z.nombre,
+      aforoMaximo: z.aforoMaximo,
+      afluenciaActual: z.afluenciaActual,
+      afluenciaSimulada: z.afluenciaSimulada,
+      capacidadActualPct: z.capacidadCargaPct,
+      capacidadSimuladaPct: z.capacidadCargaSimuladaPct,
+      riesgo: z.nivelRiesgo,
+    })),
+    sensores: resultadoSimulacion.sensoresSimulados.map(sensor => ({
+      nombre: sensor.nombre,
+      tipo: sensor.tipoSensor,
+      valor: sensor.valorSimulado,
+      unidad: sensor.unidad,
+      estado: sensor.estadoSimulado,
+    })),
+    recomendaciones: resultadoSimulacion.recomendacionesGestion,
+  }), [destinoActual.nombre, escenarioActual.nombre, clima, horaSimulacion, resultadoSimulacion]);
 
   return (
     <div className="pid-light flex h-screen w-screen overflow-hidden bg-white font-sans text-slate-800">
@@ -657,7 +636,7 @@ export default function App() {
             <button
               onClick={() => { setSeccionCabeceraActiva('simulacion'); setDrawerAiAbierto(true); }}
               className="flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-400"
-              title="Abrir asistente IA para proponer una simulación revisable"
+              title="Preguntar al asistente IA sobre los indicadores"
             >
               <Sparkles className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Asistente IA</span>
@@ -696,7 +675,7 @@ export default function App() {
               <button onClick={() => setModalDisenadorAbierto(true)} title="Diseñar una nueva simulación configurable por el destino" className="flex shrink-0 items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-[11px] font-bold text-white shadow-sm transition-colors hover:bg-red-700">
                 <Sliders className="h-3.5 w-3.5" /> + Nueva simulación
               </button>
-              <button onClick={() => setDrawerAiAbierto(true)} title="Solicitar una propuesta revisable al asistente IA" className="flex shrink-0 items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-red-700 transition-colors hover:bg-red-50">
+              <button onClick={() => setDrawerAiAbierto(true)} title="Preguntar al asistente IA sobre los indicadores" className="flex shrink-0 items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-red-700 transition-colors hover:bg-red-50">
                 <Sparkles className="h-3.5 w-3.5" /> Asistente IA
               </button>
               <button onClick={() => setModalMacroOptAbierto(true)} className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 transition-colors hover:bg-slate-100">
@@ -1004,7 +983,7 @@ export default function App() {
                     <button
                       onClick={() => setDrawerAiAbierto(true)}
                       className="flex items-center space-x-1 rounded-md border border-rose-300 bg-rose-50 px-2 py-1 text-[10px] font-bold text-rose-700 transition-colors hover:bg-rose-100"
-                      title="Pedir escenario en lenguaje natural al Asistente IA"
+                      title="Preguntar al Asistente IA sobre los indicadores"
                     >
                       <Sparkles className="h-3 w-3 text-rose-600" />
                       <span>IA</span>
@@ -1536,14 +1515,11 @@ export default function App() {
 
       {/* Copiloto IA de Simulación y What-If (Iteración 5) */}
       <AiSimulationDrawer
+        contextoIndicadores={contextoIndicadores}
         isOpen={drawerAiAbierto}
         onClose={() => setDrawerAiAbierto(false)}
-        destinationId={destinoActual.id}
         destinationName={destinoActual.nombre}
         tenantId={tenantDestinoActual}
-        activeZoneId={zonasFiltradas[0]?.id}
-        onApplyProposal={handleApplyAiProposal}
-        onOpenInScenarioStudio={handleOpenAiInStudio}
       />
 
       {/* Modal de Protocolos Operativos ante Saturación */}
