@@ -24,6 +24,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { GeoServicesCatalog } from './src/services/geoServices';
 import { DATASETS_3D_CATALOG, EDIFICIOS_OLEADA_1 } from './src/services/catalog3DService';
+import { generarActivosTerritorialesPlaceholder } from './src/services/catalogoTerritorialPlaceholder';
 import { MultiDestinationModel } from './src/services/multiDestinationModel';
 import { SemanticAdapter } from './src/services/semanticAdapter';
 import { NgsiLdEntityType, SEMANTIC_CONTEXT_URL, SEMANTIC_PROFILE_ID } from './src/types/semantic';
@@ -1674,8 +1675,8 @@ app.post("/api/federation/runs/:runId/decision", async (req, res) => {
 
 // Catálogo unificado de activos 3D/4D abiertos
 app.get("/api/3d/catalog/assets", (req, res) => {
-  const destinationId = scenarioDestination(req);
-  const runtime = scenarioScope(req, res, destinationId);
+  // Inventario de metadatos de solo lectura (como /api/3d/datasets): no requiere sesión.
+  const runtime = scopedRuntime(req.query.destino, res);
   if (!runtime) return;
 
   res.set("Cache-Control", "no-store");
@@ -1773,7 +1774,10 @@ app.get("/api/3d/catalog/assets", (req, res) => {
     }
   ];
 
-  const assets = allAssets.filter(a => a.destinationId === runtime.destination.id || a.destinationId === 'espana_general');
+  const assets = [
+    ...allAssets.filter(a => a.destinationId === runtime.destination.id || a.destinationId === 'espana_general'),
+    ...generarActivosTerritorialesPlaceholder(runtime.destination.id, runtime.destination.nombre),
+  ];
   return res.json({ destinationId: runtime.destination.id, assets, total: assets.length });
 });
 

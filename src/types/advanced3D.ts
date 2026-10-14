@@ -14,6 +14,9 @@ export type Asset3DFormat =
 
 export type SpatialLevel = 1 | 2 | 3 | 4;
 
+/** Ámbito administrativo que cubre un activo del catálogo. */
+export type TerritorialScope = 'MUNICIPIO' | 'MANCOMUNIDAD' | 'PROVINCIA' | 'COMUNIDAD_AUTONOMA';
+
 export interface Asset3DRecord {
   id: string;
   name: string;
@@ -30,8 +33,10 @@ export interface Asset3DRecord {
   boundingExtent: [number, number, number, number]; // [minLon, minLat, maxLon, maxLat]
   isOfflineFallbackAvailable: boolean;
   fingerprintSha256: string;
-  status: 'ACTIVO_VERIFICADO' | 'FALLBACK_DISPONIBLE' | 'DEGRADADO_COMPATIBLE';
+  status: 'ACTIVO_VERIFICADO' | 'FALLBACK_DISPONIBLE' | 'DEGRADADO_COMPATIBLE' | 'PLACEHOLDER_PENDIENTE';
   description: string;
+  scope?: TerritorialScope;
+  scopeLabel?: string;
 }
 
 export interface CameraPresetConfig {

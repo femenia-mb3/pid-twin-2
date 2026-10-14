@@ -7,6 +7,11 @@ import {
 } from "lucide-react";
 import { Asset3DRecord } from '../types/advanced3D';
 
+const NOMBRE_NIVEL: Record<number, string> = { 1: 'Municipio', 2: 'Mancomunidad', 3: 'Provincia', 4: 'Comunidad autónoma' };
+
+const estiloEstado = (status: Asset3DRecord['status']) =>
+  status === 'PLACEHOLDER_PENDIENTE' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800';
+
 interface Assets3DCatalogModalProps {
   open: boolean;
   onClose: () => void;
@@ -90,7 +95,7 @@ export const Assets3DCatalogModal: React.FC<Assets3DCatalogModalProps> = ({
                     filtroNivel === n ? 'bg-white text-cyan-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  {n === 'TODOS' ? 'Todos' : `Nivel ${n}`}
+                  {n === 'TODOS' ? 'Todos' : `${n} · ${NOMBRE_NIVEL[n]}`}
                 </button>
               ))}
             </div>
@@ -139,13 +144,14 @@ export const Assets3DCatalogModal: React.FC<Assets3DCatalogModalProps> = ({
                       <div>
                         <div className="flex items-center space-x-2">
                           <span className="text-[10px] font-bold px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded">
-                            NIVEL {a.level}
+                            NIVEL {a.level} · {NOMBRE_NIVEL[a.level].toUpperCase()}
                           </span>
                           <span className="text-xs font-bold text-slate-800">{a.name}</span>
                         </div>
-                        <p className="text-[11px] text-slate-500 mt-1 line-clamp-1">{a.description}</p>
+                        {a.scopeLabel && <p className="text-[10px] font-semibold text-cyan-700 mt-0.5">{a.scopeLabel}</p>}
+                      <p className="text-[11px] text-slate-500 mt-1 line-clamp-1">{a.description}</p>
                       </div>
-                      <span className="text-[9px] font-semibold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full shrink-0">
+                      <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${estiloEstado(a.status)}`}>
                         {a.status}
                       </span>
                     </div>
@@ -168,6 +174,8 @@ export const Assets3DCatalogModal: React.FC<Assets3DCatalogModalProps> = ({
                   <span className="text-[10px] font-bold text-cyan-600 uppercase tracking-wider">Ficha Técnica & Gobernanza</span>
                   <h3 className="text-base font-bold text-slate-800 mt-0.5">{activoSeleccionado.name}</h3>
                   <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">{activoSeleccionado.description}</p>
+                  {activoSeleccionado.scopeLabel && <p className="text-[11px] font-semibold text-cyan-700 mt-1">Ámbito: {activoSeleccionado.scopeLabel}</p>}
+                  {activoSeleccionado.status === 'PLACEHOLDER_PENDIENTE' && <p className="mt-2 rounded-lg bg-amber-50 border border-amber-200 p-2 text-[11px] text-amber-800">Entrada de marcador: el activo aún no está ingerido. El endpoint y la huella son provisionales.</p>}
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-[11px]">
