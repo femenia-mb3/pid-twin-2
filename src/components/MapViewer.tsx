@@ -567,10 +567,6 @@ export const MapViewer: React.FC<MapViewerProps> = ({
         </div>
       )}
 
-      {simulacionVisual.escenarioId === 'episodio_meteo' && simulacionVisual.intensidad >= 0.12 && (
-        <div className="simulation-rain-overlay pointer-events-none absolute inset-0 z-[5]" style={{ opacity: Math.min(0.48, 0.12 + simulacionVisual.intensidad * 0.28) }} />
-      )}
-
       {cartografiaBase && (
         <div className="absolute left-4 top-4 z-10 max-w-[280px] rounded-lg border border-sky-200 bg-white/95 p-3 text-[11px] text-slate-700 shadow-xl backdrop-blur">
           <div className="mb-1 flex items-center justify-between gap-3">

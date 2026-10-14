@@ -851,7 +851,7 @@ export default function App() {
 
         <WeatherOverlay
           clima={clima}
-          omitirLluvia={nivelVisualizacion < 3 && escenarioVisualId === 'episodio_meteo'}
+          lluviaIntensa={escenarioVisualId === 'episodio_meteo' && intensidadVisual >= 0.12 ? Math.min(1, intensidadVisual) : undefined}
         />
 
         {/* Modal de Detalle de elemento inspeccionado */}
