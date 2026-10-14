@@ -1,4 +1,4 @@
-import { RUTAS_ENOTURISMO, RUTAS_GIBRALFARO, RUTAS_ZBE_ENTRADA, RutaPeatonal } from '../data/rutasModelosCatalogo';
+import { RUTAS_CENTRO_A_ZONA_MALAGA, RUTAS_ENOTURISMO, RUTAS_GIBRALFARO, RUTAS_ZBE_ENTRADA, RutaPeatonal } from '../data/rutasModelosCatalogo';
 
 /** Flujo turístico dibujado en los visores cuando una simulación del catálogo está activa. */
 export interface FlujoModelo {
@@ -57,6 +57,44 @@ export function flujosParaEscenario(
       esDesvio: true,
     }));
   }
+  return flujos;
+}
+
+/** Id con el que se marcan las simulaciones creadas en el editor visual no-code. */
+export const MODELO_EDITOR_VISUAL = 'editor_visual';
+
+export const COLOR_FLUJO_EDITOR = '#7c3aed';
+
+/**
+ * Simulación creada en el editor visual: los turistas salen del centro de la ciudad hacia cada zona
+ * seleccionada. En Málaga siguen rutas a pie reales; en otras zonas, una línea recta al centro de la zona.
+ */
+export function flujosEditorVisual(
+  zoneIds: string[],
+  zonas: Array<{ id: string; nombre: string; coordenadasPoligono: [number, number][] }>,
+  centroCiudad: [number, number],
+  clima: 'DESPEJADO' | 'LLUVIA' | 'CALOR_EXTREMO',
+): FlujoModelo[] {
+  const flujos: FlujoModelo[] = [];
+  for (const id of zoneIds) {
+    const zona = zonas.find(z => z.id === id);
+    if (!zona) continue;
+    const ruta = RUTAS_CENTRO_A_ZONA_MALAGA[id] ?? (() => {
+      const n = zona.coordenadasPoligono.length || 1;
+      const lat = zona.coordenadasPoligono.reduce((a, p) => a + p[0], 0) / n;
+      const lng = zona.coordenadasPoligono.reduce((a, p) => a + p[1], 0) / n;
+      return [centroCiudad, [lat, lng]] as [number, number][];
+    })();
+    flujos.push({
+      id: `editor-flujo-${id}`,
+      etiqueta: `Flujo turístico desde el centro · ${zona.nombre}`,
+      color: COLOR_FLUJO_EDITOR,
+      puntos: ruta,
+      peso: 1,
+      esDesvio: false,
+    });
+  }
+  void clima;
   return flujos;
 }
 

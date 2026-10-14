@@ -19,6 +19,7 @@ import {
 import { Destino, ZonaDestino } from '../types/ontology';
 import { ReusableModelTemplate } from '../types/interoperability';
 import { ScenarioDefinition, ScenarioDraftInput, createScenarioDraft } from '../types/scenarioStudio';
+import { MODELO_EDITOR_VISUAL } from '../services/modelFlows';
 import { applyModelProfile, createSessionScenario, packageToSessionScenario } from '../services/sessionScenarios';
 import { SimulationModelPackageV1 } from '../types/simulationModelPackage';
 import { DataBindingModal } from './DataBindingModal';
@@ -284,7 +285,7 @@ evidence:
       setMessage({ text: 'Selecciona al menos una zona afectada.', type: 'error' });
       return;
     }
-    const scenario = createSessionScenario({ ...editorDraft, destinationId: destination.id, tenantId });
+    const scenario = createSessionScenario({ ...editorDraft, destinationId: destination.id, tenantId, sourceModelId: MODELO_EDITOR_VISUAL });
     addToSession(scenario, `«${scenario.name}» creada y añadida a tu panel. Estará disponible hasta que recargues la página.`);
   };
 

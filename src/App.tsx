@@ -49,7 +49,7 @@ import { Edificio3DRecord } from './services/catalog3DService';
 import { ContextPackageV1 } from './types/contextPackage';
 import { ScenarioDefinition, ScenarioExecution, scenarioToRuntimeBinding } from './types/scenarioStudio';
 import { isSessionScenarioId } from './services/sessionScenarios';
-import { flujosParaEscenario } from './services/modelFlows';
+import { MODELO_EDITOR_VISUAL, flujosEditorVisual, flujosParaEscenario } from './services/modelFlows';
 import { ContextoIndicadores } from './services/indicatorQa';
 import {
   Globe,
@@ -187,11 +187,6 @@ export default function App() {
     [escenariosSesion, destinoActual.id],
   );
   const escenarioEditorActivo = escenariosSesionDestino.find(escenario => escenario.id === escenarioSeleccionadoId) ?? null;
-  // Flujos turísticos propios de la simulación del catálogo activa (más la Ruta de Desvío con lluvia o calor).
-  const flujosModelo = useMemo(
-    () => flujosParaEscenario(escenarioEditorActivo?.sourceModelId, clima),
-    [escenarioEditorActivo?.sourceModelId, clima],
-  );
   // Registrar (o actualizar) un escenario de sesión; pasar null no hace nada.
   const setEscenarioEditorActivo = (escenario: ScenarioDefinition | null) => {
     if (!escenario) return;
@@ -284,6 +279,13 @@ export default function App() {
     return sensoresDisponibles.filter(s => s.destinoId === destinoActual.id);
   }, [destinoActual.id, sensoresDisponibles]);
 
+  // Flujos turísticos propios de la simulación del catálogo activa (más la Ruta de Desvío con lluvia o calor).
+  const flujosModelo = useMemo(
+    () => escenarioEditorActivo?.sourceModelId === MODELO_EDITOR_VISUAL
+      ? flujosEditorVisual(escenarioEditorActivo.inputs.zoneIds, zonasFiltradas, destinoActual.centro, clima)
+      : flujosParaEscenario(escenarioEditorActivo?.sourceModelId, clima),
+    [escenarioEditorActivo, zonasFiltradas, destinoActual.centro, clima],
+  );
   const escenariosDisponibles = useMemo(
     () => [
       // Destinos demostradores: escenarios de la v3 (crucero, evento, episodio meteorológico).
