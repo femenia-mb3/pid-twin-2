@@ -138,7 +138,7 @@ export const MultiDestinationModal = ({ isOpen, onClose }: MultiDestinationModal
                   <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
                     <div>
                       <span className="text-xs font-bold text-slate-800">Modelo a contrastar entre destinos:</span>
-                      <p className="text-[11px] text-slate-500">Evalúa si los destinos disponen de fuentes requeridas (S2/C4/S11) para ejecutar el modelo de forma homogénea.</p>
+                      <p className="text-[11px] text-slate-500">Evalúa si los destinos disponen de fuentes requeridas (S2/C4/Territorio) para ejecutar el modelo de forma homogénea.</p>
                     </div>
                     <select
                       value={selectedModelForEval}

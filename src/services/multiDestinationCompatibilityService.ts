@@ -70,7 +70,7 @@ export class MultiDestinationCompatibilityService {
       // Check 3: Cartografía GIS S11
       checks.push({
         requirementId: 'req_s11_gis',
-        name: 'Servicios Territoriales y Polígonos (S11)',
+        name: 'Servicios Territoriales y Polígonos',
         category: 'GIS_S11',
         status: 'DISPONIBLE',
         evidenceDetails: 'Servicios WMS/TMS IGN y capas de zonificación operativas.'

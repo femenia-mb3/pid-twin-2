@@ -16,6 +16,10 @@ const reviewedAt = '2026-09-30T00:00:00.000Z';
 
 const evidence = (label: string, url: string, note: string) => ({ label, url, note, reviewedAt });
 
+// Etiqueta visible de los módulos PID: S11 y S18 se muestran por su nombre funcional; los ids siguen siendo los mismos.
+const PID_MODULE_LABELS: Record<string, string> = { S11: 'Territorio', S18: 'Simulación' };
+export const pidModuleLabel = (id: string) => PID_MODULE_LABELS[id] ?? id;
+
 export const PID_SERVICE_RELATIONS: PidServiceRelation[] = [
   {
     id: 'S2',
@@ -92,7 +96,7 @@ export const INTEROPERABILITY_ARCHITECTURE: InteroperabilityArchitecture = {
     'Modelo semántico y geoespacial del destino',
     'Motor común de contexto y simulación',
     'Modelos preconfigurados + propios + reutilizables',
-    'S11 / S18 / visor geoespacial / APIs / dashboards'
+    'Territorio / Simulación / visor geoespacial / APIs / dashboards'
   ],
   lanes: [
     {
@@ -101,7 +105,7 @@ export const INTEROPERABILITY_ARCHITECTURE: InteroperabilityArchitecture = {
       subtitle: 'Datos con significado interoperable y entidades del destino.',
       sources: ['S2', 'S1', 'recursos y activos normalizados', 'NGSI-LD', 'GeoJSON semántico'],
       processing: ['Validación de contexto', 'mapeo SEGITTUR/PID', 'relaciones de destino', 'calidad y trazabilidad'],
-      output: 'Entidades NGSI-LD listas para S11, S18 y APIs del gemelo.',
+      output: 'Entidades NGSI-LD listas para Territorio, Simulación y APIs del gemelo.',
       evidence: evidence('Perfil semántico del Gemelo', '/api/semantic/model', 'Describe los tipos, relaciones, contexto y evidencia del carril ontológico.')
     },
     {
@@ -117,8 +121,8 @@ export const INTEROPERABILITY_ARCHITECTURE: InteroperabilityArchitecture = {
   pidServices: PID_SERVICE_RELATIONS,
   evidence: [
     evidence('Modelo multidestino y perfil semántico', '/api/semantic/model', 'Base de interoperabilidad turística y de aislamiento por destino.'),
-    evidence('Catálogo geoespacial', '/api/geo/catalogo', 'Evidencia de explotación territorial preparada para S11.'),
-    evidence('Motor de simulación', '/api/simulacion/ejecutar', 'Evidencia de explotación de escenarios preparada para S18.')
+    evidence('Catálogo geoespacial', '/api/geo/catalogo', 'Evidencia de explotación territorial preparada para Territorio.'),
+    evidence('Motor de simulación', '/api/simulacion/ejecutar', 'Evidencia de explotación de escenarios preparada para Simulación.')
   ]
 };
 
@@ -456,7 +460,7 @@ export class InteroperabilityCatalogService {
         intensity: intensidad,
         spatialDistribution: 'CONCENTRADA',
         eventLabel: model.title,
-        notes: `Módulos PID requeridos: ${(model.pidModulesRequired || ['S2', 'S18']).join(', ')}. Regla: ${model.ruleSummary}`,
+        notes: `Módulos PID requeridos: ${(model.pidModulesRequired || ['S2', 'S18']).map(pidModuleLabel).join(', ')}. Regla: ${model.ruleSummary}`,
       }
     };
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ConnectorConfigurationModal } from './ConnectorConfigurationModal';
+import { pidModuleLabel } from '../services/interoperabilityCatalogService';
 import {
   Plus,
   ArrowRight,
@@ -314,7 +315,7 @@ export const InteroperabilityModal = ({ isOpen, onClose, initialDestinationId }:
                     <div className="grid divide-y divide-slate-100 md:grid-cols-3 md:divide-x md:divide-y-0">
                       {architecture.pidServices.map(service => (
                         <article key={service.id} className="p-3.5">
-                          <div className="flex items-center justify-between gap-2"><span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-white">{service.id}</span><a href={service.evidence.url} target="_blank" rel="noreferrer" className="text-cyan-700 hover:text-cyan-900" title="Abrir evidencia"><ExternalLink className="h-3.5 w-3.5" /></a></div>
+                          <div className="flex items-center justify-between gap-2"><span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-white">{pidModuleLabel(service.id)}</span><a href={service.evidence.url} target="_blank" rel="noreferrer" className="text-cyan-700 hover:text-cyan-900" title="Abrir evidencia"><ExternalLink className="h-3.5 w-3.5" /></a></div>
                           <p className="mt-2 text-xs font-semibold text-slate-800">{service.role}</p>
                           <p className="mt-1 text-[11px] leading-relaxed text-slate-600">{service.dataTreatment}</p>
                           <p className="mt-2 text-[10px] leading-relaxed text-amber-800"><b>Privacidad:</b> {service.privacyRule}</p>

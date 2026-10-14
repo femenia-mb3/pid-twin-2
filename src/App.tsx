@@ -595,21 +595,21 @@ export default function App() {
           <nav className="hidden min-[1180px]:flex flex-1 items-center justify-center gap-1" aria-label="Áreas principales del Gemelo">
             <button
               onClick={() => { setSeccionCabeceraActiva('visor'); setPestañaLateral('sensores'); }}
-              title="Área territorial alineada con S11 · Inteligencia de Localizaciones"
+              title="Área territorial Inteligencia de Localizaciones"
               className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${
                 seccionCabeceraActiva === 'visor' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
               }`}
             >
-              Territorio · S11
+              Territorio
             </button>
             <button
               onClick={() => { setSeccionCabeceraActiva('simulacion'); setPestañaLateral('simulador'); }}
-              title="Área de previsión y simulación alineada con S18"
+              title="Área de previsión y simulación"
               className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${
                 seccionCabeceraActiva === 'simulacion' ? 'bg-red-600 text-white shadow-sm' : 'text-slate-600 hover:bg-red-50 hover:text-red-700'
               }`}
             >
-              Simulación · S18
+              Simulación
             </button>
             <button
               onClick={() => setSeccionCabeceraActiva('operacion')}
@@ -652,7 +652,7 @@ export default function App() {
           {seccionCabeceraActiva === 'visor' && (
             <>
               <div className="flex shrink-0 items-center gap-1.5 pr-2 text-[10px] font-bold uppercase tracking-[0.11em] text-slate-500">
-                <Layers className="h-3.5 w-3.5 text-cyan-600" /> S11 · Localización
+                <Layers className="h-3.5 w-3.5 text-cyan-600" /> Localización
               </div>
               <div className="flex shrink-0 items-center rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
                 <button onClick={() => setNivelVisualizacion(1)} className={`rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${nivelVisualizacion === 1 ? 'bg-red-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>1 · Base 2D</button>
@@ -672,7 +672,7 @@ export default function App() {
           {seccionCabeceraActiva === 'simulacion' && (
             <>
               <div className="flex shrink-0 items-center gap-1.5 pr-2 text-[10px] font-bold uppercase tracking-[0.11em] text-red-700">
-                <Sliders className="h-3.5 w-3.5" /> S18 · Escenarios y modelos
+                <Sliders className="h-3.5 w-3.5" /> Escenarios y modelos
               </div>
               <button onClick={() => setModalDisenadorAbierto(true)} title="Diseñar una nueva simulación configurable por el destino" className="flex shrink-0 items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-[11px] font-bold text-white shadow-sm transition-colors hover:bg-red-700">
                 <Sliders className="h-3.5 w-3.5" /> + Nueva simulación
@@ -906,7 +906,7 @@ export default function App() {
           </button>
           <button
             onClick={() => setPestañaLateral('capas')}
-            title="S11 · Capas e información territorial"
+            title="Capas e información territorial"
             className={`flex-1 py-1.5 rounded-md flex items-center justify-center space-x-1.5 transition-colors ${
               pestañaLateral === 'capas' ? 'bg-white text-emerald-700 shadow-sm border border-slate-200' : 'hover:text-slate-900'
             }`}
@@ -926,13 +926,13 @@ export default function App() {
           </button>
           <button
             onClick={() => setPestañaLateral(pestañaLateral === 'validacion' ? 'validacion' : 'simulador')}
-            title="S18 · Previsión, simulación y validación"
+            title="Previsión, simulación y validación"
             className={`flex-1 py-1.5 rounded-md flex items-center justify-center space-x-1.5 transition-colors ${
               (pestañaLateral === 'simulador' || pestañaLateral === 'validacion') ? 'bg-white text-red-600 shadow-sm border border-slate-200' : 'hover:text-slate-900'
             }`}
           >
             <Sliders className="w-3.5 h-3.5" />
-            <span>S18</span>
+            <span>Simulación</span>
           </button>
         </div>
 
@@ -971,7 +971,7 @@ export default function App() {
               <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">
-                    Escenario S18
+                    Escenario
                   </span>
                   <div className="flex items-center gap-2">
                     <button
