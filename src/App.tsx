@@ -2,6 +2,8 @@ import { GoogleGeoSuiteModal } from "./components/GoogleGeoSuiteModal";
 import { RapidResponseAgentModal } from "./components/RapidResponseAgentModal";
 import { MacroOptimizationModal } from "./components/MacroOptimizationModal";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { TIPOS_CRUCERO } from './data/cruiseShipTypes';
+import type { TraficoPuertoMalaga } from './services/malagaPortTrafficService';
 import { 
   DESTINOS_DEMO, 
   ZONAS_DEMO, 
@@ -96,7 +98,10 @@ import { KpiMapa } from './services/kpiBuildingColors';
 
 // Simulaciones pendientes de desarrollo: se listan como "Solicitado" en el panel izquierdo (modelos por destino).
 // Red de drenaje de referencia (Escenario 3): con estos valores la lluvia produce el efecto base.
-const DRENAJE_REFERENCIA = { eficiencia: 70, imbornales: 4000, caudalLs: 20 };
+// Pasajeros equivalentes del ajuste manual por defecto (2 llegadas x 9.500): magnitud 1 del Escenario 1.
+const PASAJEROS_REFERENCIA_CRUCEROS = 2 * 9500;
+
+const DRENAJE_REFERENCIA ={ eficiencia: 70, imbornales: 4000, caudalLs: 20 };
 const CAPACIDAD_DRENAJE_REFERENCIA_LS = DRENAJE_REFERENCIA.imbornales * DRENAJE_REFERENCIA.caudalLs * (DRENAJE_REFERENCIA.eficiencia / 100);
 
 const SIMULACIONES_SOLICITADAS = [
@@ -156,6 +161,11 @@ export default function App() {
   const [horaSimulacion, setHoraSimulacion] = useState<number>(10);
   const [reproduciendoSimulacion, setReproduciendoSimulacion] = useState<boolean>(false);
   const [numeroCruceros, setNumeroCruceros] = useState<number>(2);
+  // Escenario 1: parámetros fijos, flota por tipos de crucero o tráfico real del puerto de Málaga.
+  const [modoCruceros, setModoCruceros] = useState<'manual' | 'flota' | 'tiempo_real'>('manual');
+  const [flotaCruceros, setFlotaCruceros] = useState<Record<string, number>>({ mediano: 1, grande: 1 });
+  const [traficoPuerto, setTraficoPuerto] = useState<TraficoPuertoMalaga | null>(null);
+  const [traficoPuertoEstado, setTraficoPuertoEstado] = useState<'idle' | 'cargando' | 'error'>('idle');
   const [pasajerosCruceros, setPasajerosCruceros] = useState<number>(9500);
   const [porcentajeDesembarco, setPorcentajeDesembarco] = useState<number>(78);
   const [asistentesEvento, setAsistentesEvento] = useState<number>(32000);
@@ -232,11 +242,38 @@ export default function App() {
     return 0;
   }, [claveEscenario, horaSimulacion]);
 
+  // Pasajeros que llegan según el modo: flota elegida por tipos o buques detectados en el puerto.
+  const pasajerosModoCruceros = modoCruceros === 'flota'
+    ? TIPOS_CRUCERO.reduce((total, tipo) => total + (flotaCruceros[tipo.id] ?? 0) * tipo.capacidad, 0)
+    : modoCruceros === 'tiempo_real'
+      ? (traficoPuerto?.buques ?? []).reduce((total, buque) => total + buque.capacidad, 0)
+      : 0;
+
+  // Tráfico del puerto de Málaga: se consulta al activar el modo y se refresca cada minuto.
+  const cargarTraficoPuerto = useCallback(async () => {
+    setTraficoPuertoEstado('cargando');
+    try {
+      const respuesta = await fetch('/api/puerto/malaga/trafico');
+      if (!respuesta.ok) throw new Error(`HTTP ${respuesta.status}`);
+      setTraficoPuerto(await respuesta.json());
+      setTraficoPuertoEstado('idle');
+    } catch {
+      setTraficoPuertoEstado('error');
+    }
+  }, []);
+  useEffect(() => {
+    if (modoCruceros !== 'tiempo_real') return;
+    void cargarTraficoPuerto();
+    const id = window.setInterval(() => void cargarTraficoPuerto(), 60000);
+    return () => window.clearInterval(id);
+  }, [modoCruceros, cargarTraficoPuerto]);
+
   // Capacidad de evacuación de la red de imbornales (L/s) = nº de imbornales x caudal medio x eficiencia.
   const capacidadDrenajeLs = numeroImbornales * caudalImbornalLs * (eficienciaDrenaje / 100);
 
   const magnitudEscenario = useMemo(() => {
     if (claveEscenario === 'presion-alta-demanda') {
+      if (modoCruceros !== 'manual') return Math.min(1.5, (pasajerosModoCruceros / PASAJEROS_REFERENCIA_CRUCEROS) * (porcentajeDesembarco / 78));
       return Math.min(1.5, (numeroCruceros / 2) * (pasajerosCruceros / 9500) * (porcentajeDesembarco / 78));
     }
     if (claveEscenario === 'evento-local') return Math.min(1.5, asistentesEvento / 32000);
@@ -246,7 +283,7 @@ export default function App() {
       return Math.min(1.5, (precipitacionMmH / 45) * presionDrenaje);
     }
     return 0;
-  }, [claveEscenario, numeroCruceros, pasajerosCruceros, porcentajeDesembarco, asistentesEvento, precipitacionMmH, capacidadDrenajeLs]);
+  }, [claveEscenario, numeroCruceros, pasajerosCruceros, porcentajeDesembarco, modoCruceros, pasajerosModoCruceros, asistentesEvento, precipitacionMmH, capacidadDrenajeLs]);
 
   const parametrosBaseSimulacion: ParametrosDestinoConfigurables = useMemo(() => ({
     umbralSaturacionAlerta: umbralAlerta,
@@ -445,6 +482,8 @@ export default function App() {
     setHoraSimulacion(12);
     setReproduciendoSimulacion(false);
     setNumeroCruceros(2);
+    setModoCruceros('manual');
+    setFlotaCruceros({ mediano: 1, grande: 1 });
     setPasajerosCruceros(9500);
     setPorcentajeDesembarco(78);
     setAsistentesEvento(32000);
@@ -1110,6 +1149,93 @@ export default function App() {
                 <div className="flex justify-between text-[9px] text-slate-500"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>23:00</span></div>
 
                 {claveEscenario === 'presion-alta-demanda' && (
+                  <div className="flex gap-1 border-t border-slate-100 pt-2">
+                    {([['manual', 'Parámetros'], ['flota', 'Tipos de crucero'], ['tiempo_real', 'Puerto en tiempo real']] as const).map(([modo, etiqueta]) => (
+                      <button
+                        key={modo}
+                        type="button"
+                        onClick={() => setModoCruceros(modo)}
+                        className={`flex-1 rounded-md border px-1 py-1 text-[9px] font-bold transition-colors ${modoCruceros === modo ? 'border-cyan-600 bg-cyan-600 text-white shadow-sm' : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-white'}`}
+                      >{etiqueta}</button>
+                    ))}
+                  </div>
+                )}
+
+                {claveEscenario === 'presion-alta-demanda' && modoCruceros === 'flota' && (
+                  <div className="space-y-1">
+                    {TIPOS_CRUCERO.map(tipo => (
+                      <div key={tipo.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1">
+                        <div className="min-w-0">
+                          <span className="block truncate text-[10px] font-bold text-slate-800">{tipo.nombre}</span>
+                          <span className="block truncate text-[9px] text-slate-500">{tipo.modelo} · {tipo.capacidad.toLocaleString('es-ES')} pax</span>
+                        </div>
+                        <input
+                          type="number" min="0" max="4"
+                          aria-label={`Número de ${tipo.nombre}`}
+                          value={flotaCruceros[tipo.id] ?? 0}
+                          onChange={(e) => setFlotaCruceros(actual => ({ ...actual, [tipo.id]: Math.max(0, Math.min(4, Number(e.target.value))) }))}
+                          className="w-12 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-center text-slate-800"
+                        />
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-between rounded bg-cyan-50 px-2 py-1 text-[9px] text-cyan-900">
+                      <span className="font-medium">{TIPOS_CRUCERO.reduce((t, tipo) => t + (flotaCruceros[tipo.id] ?? 0), 0)} buques</span>
+                      <span className="font-mono font-bold">{pasajerosModoCruceros.toLocaleString('es-ES')} pasajeros</span>
+                    </div>
+                  </div>
+                )}
+
+                {claveEscenario === 'presion-alta-demanda' && modoCruceros === 'tiempo_real' && (
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[9px]">
+                      <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 font-bold ${traficoPuerto?.fuente === 'ais_en_vivo' ? 'bg-emerald-500 text-white' : 'bg-amber-100 text-amber-800'}`}>
+                        {traficoPuerto?.fuente === 'ais_en_vivo' && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />}
+                        {traficoPuerto ? (traficoPuerto.fuente === 'ais_en_vivo' ? 'AIS en vivo' : 'Datos simulados') : 'Sin datos'}
+                      </span>
+                      <button type="button" onClick={() => void cargarTraficoPuerto()} disabled={traficoPuertoEstado === 'cargando'} className="rounded border border-slate-200 bg-white px-1.5 py-0.5 font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+                        {traficoPuertoEstado === 'cargando' ? 'Actualizando…' : 'Actualizar'}
+                      </button>
+                    </div>
+                    {traficoPuertoEstado === 'error' && <p className="text-[9px] text-red-600">No se pudo consultar el tráfico del puerto (¿está el servidor API en marcha?).</p>}
+                    {traficoPuerto && traficoPuerto.buques.length === 0 && <p className="text-[9px] text-slate-500">No hay cruceros en el puerto ni en aproximación ahora mismo.</p>}
+                    {traficoPuerto?.buques.map(buque => (
+                      <div
+                        key={buque.id}
+                        className={`flex items-center justify-between gap-2 rounded-lg border-l-4 border px-2 py-1.5 ${buque.estado === 'atracado'
+                          ? 'border-emerald-300 border-l-emerald-500 bg-emerald-50 shadow-sm ring-1 ring-emerald-200'
+                          : 'border-slate-200 border-l-amber-400 bg-slate-50'}`}
+                      >
+                        <div className="min-w-0">
+                          <span className="flex items-center gap-1.5">
+                            <span className="truncate text-[11px] font-bold text-slate-900">{buque.nombre}</span>
+                            {buque.estado === 'atracado' && (
+                              <span className="flex shrink-0 items-center gap-1 rounded-full bg-emerald-500 px-1.5 py-0.5 text-[8px] font-extrabold uppercase tracking-wide text-white">
+                                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />Activo
+                              </span>
+                            )}
+                          </span>
+                          <span className={`block text-[9px] font-medium ${buque.estado === 'atracado' ? 'text-emerald-800' : 'text-amber-700'}`}>
+                            {buque.estado === 'atracado' ? 'Atracado en el puerto' : `En aproximación · ETA ${buque.etaMin} min`}
+                          </span>
+                        </div>
+                        <span className={`shrink-0 font-mono text-[11px] font-bold ${buque.estado === 'atracado' ? 'text-emerald-700' : 'text-slate-500'}`}>{buque.capacidad.toLocaleString('es-ES')} pax</span>
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-between rounded bg-cyan-50 px-2 py-1 text-[9px] text-cyan-900">
+                      <span className="font-medium">{traficoPuerto?.buques.length ?? 0} buques</span>
+                      <span className="font-mono font-bold">{pasajerosModoCruceros.toLocaleString('es-ES')} pasajeros</span>
+                    </div>
+                    {traficoPuerto && <p className="text-[8px] leading-snug text-slate-400">{traficoPuerto.detalle} Actualizado {new Date(traficoPuerto.actualizado).toLocaleTimeString('es-ES')}.</p>}
+                  </div>
+                )}
+
+                {claveEscenario === 'presion-alta-demanda' && modoCruceros !== 'manual' && (
+                  <label className="block text-[9px] font-semibold text-slate-600">Distribución %
+                    <input type="number" min="20" max="100" value={porcentajeDesembarco} onChange={(e) => setPorcentajeDesembarco(Number(e.target.value))} className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-slate-800" />
+                  </label>
+                )}
+
+                {claveEscenario === 'presion-alta-demanda' && modoCruceros === 'manual' && (
                   <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-2">
                     <label className="text-[9px] font-semibold text-slate-600">Llegadas<input type="number" min="1" max="4" value={numeroCruceros} onChange={(e) => setNumeroCruceros(Number(e.target.value))} className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-slate-800" /></label>
                     <label className="text-[9px] font-semibold text-slate-600">Volumen<input type="number" min="1000" max="18000" step="500" value={pasajerosCruceros} onChange={(e) => setPasajerosCruceros(Number(e.target.value))} className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-slate-800" /></label>

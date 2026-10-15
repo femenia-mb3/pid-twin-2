@@ -7,6 +7,7 @@ import { MacroPostgisExtension } from "./src/services/macroPostgisExtension";
 import { RapidResponseAgentService } from "./src/services/rapidResponseAgentService";
 import { RapidResponsePostgisExtension } from "./src/services/rapidResponsePostgisExtension";
 import crypto from "node:crypto";
+import { obtenerTraficoPuertoMalaga } from './src/services/malagaPortTrafficService';
 
 import { PidOntologyRegistryService } from "./src/services/pidOntologyRegistryService";
 import { S2SemanticConnectorService } from "./src/services/s2SemanticConnectorService";
@@ -606,6 +607,16 @@ app.get('/api/3d/datasets/:id/manifest', (req, res) => {
       }
     }
   });
+});
+
+// Tráfico de cruceros del puerto de Málaga (AIS en vivo si hay clave; calendario sintético en caso contrario).
+app.get('/api/puerto/malaga/trafico', async (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    return res.json(await obtenerTraficoPuertoMalaga());
+  } catch (error) {
+    return res.status(502).json({ error: error instanceof Error ? error.message : 'No se pudo obtener el tráfico portuario' });
+  }
 });
 
 // Endpoints de Datos Abiertos Interoperables (Iteración 10)
