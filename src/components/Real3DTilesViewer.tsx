@@ -28,6 +28,7 @@ import 'cesium/Build/Cesium/Widgets/widgets.css';
 import { CheckCircle2, Layers, LoaderCircle, MapPin, TriangleAlert, Building2, Cloud, Boxes, Pause, Play, Box, X, MousePointer2, Sun, Car } from 'lucide-react';
 import { RecursoTuristico, SensorIoT, ZonaDestino } from '../types/ontology';
 import { EDIFICIOS_OLEADA_1, Edificio3DRecord } from '../services/catalog3DService';
+import { FloodFlowMaterialProperty } from './floodFlowMaterial';
 import { OpenDataService } from '../services/openDataService';
 import { sensorMarkerDataUri, sensorVisual } from '../services/sensorVisuals';
 import { leyendaFlujoSimulacion } from '../services/simulationFlowLegend';
@@ -281,6 +282,7 @@ export const Real3DTilesViewer = forwardRef<Real3DTilesViewerHandle, Real3DTiles
   };
   const flowPhaseRef = useRef(0);
   const zonasInundacionRef = useRef<{ features: { properties: { riesgo: 'alto' | 'medio' | 'bajo' }; geometry: { type: string; coordinates: unknown } }[] } | null>(null);
+  const direccionesAguaRef = useRef<number[] | null>(null);
   const [zonasInundacionListas, setZonasInundacionListas] = useState(false);
   const simulacionRef = useRef(simulacionVisual);
   simulacionRef.current = simulacionVisual;
@@ -309,26 +311,6 @@ export const Real3DTilesViewer = forwardRef<Real3DTilesViewerHandle, Real3DTiles
         : simulacion.escenarioId === 'evento_cultural'
           ? { color: '#d946ef', puntos: RUTAS_EVENTO_VIARIAS, etiqueta: 'Circuito cultural nocturno' }
           : null;
-      // Afección por lluvias: zonas de acumulación de agua sobre calzada (mismas que en Mapa 2D).
-      const zonasAgua = zonasInundacionRef.current;
-      if (simulacion.escenarioId === 'episodio_meteo' && zonasAgua) {
-        const estilos = { alto: ['#0369a1', 0.8], medio: ['#0ea5e9', 0.55], bajo: ['#7dd3fc', 0.4] } as const;
-        zonasAgua.features.forEach((feature, fi) => {
-          const [fill, opacidad] = estilos[feature.properties.riesgo];
-          const poligonos = feature.geometry.type === 'MultiPolygon'
-            ? feature.geometry.coordinates as number[][][][]
-            : [feature.geometry.coordinates as number[][][]];
-          poligonos.forEach((anillos, pi) => add({
-            id: `lluvia-${fi}-${pi}`,
-            name: `Posible acumulación de agua · riesgo ${feature.properties.riesgo}`,
-            polygon: {
-              hierarchy: crearJerarquia(anillos),
-              height: 1,
-              material: Color.fromCssColorString(fill).withAlpha(opacidad * (0.35 + 0.65 * intensidad)),
-            },
-          }));
-        });
-      }
       simulacion.flujos?.forEach((flujoModelo) => {
         const color = Color.fromCssColorString(flujoModelo.color);
         const peso = flujoModelo.peso;
@@ -962,19 +944,75 @@ export const Real3DTilesViewer = forwardRef<Real3DTilesViewerHandle, Real3DTiles
     const viewer = viewerRef.current;
     if (!viewer || viewer.isDestroyed()) return;
     rebuildOperationalEntities(viewer);
-  }, [recursos, sensores, rutasDesvio, analytics4D, zonasInundacionListas, simulacionVisual?.escenarioId, simulacionVisual?.flujos, simulacionVisual && Math.round(simulacionVisual.intensidad * 20)]);
+  }, [recursos, sensores, rutasDesvio, analytics4D, simulacionVisual?.escenarioId, simulacionVisual?.flujos, simulacionVisual && Math.round(simulacionVisual.intensidad * 20)]);
 
   // Zonas de acumulación de agua: se descargan al activar el episodio de lluvia.
   const lluviaActiva = simulacionVisual?.escenarioId === 'episodio_meteo';
   useEffect(() => {
     if (!lluviaActiva || zonasInundacionRef.current) return;
     const controller = new AbortController();
-    fetch('/data/malaga/malaga-zonas-inundacion.geojson', { signal: controller.signal })
-      .then(response => (response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`))))
-      .then(data => { zonasInundacionRef.current = data; setZonasInundacionListas(true); })
+    const cargar = (url: string) => fetch(url, { signal: controller.signal })
+      .then(response => (response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`))));
+    // Sentido de la corriente por tramo (opcional): si falla, las zonas se pintan en color plano.
+    const direcciones = cargar('/data/malaga/malaga-flujos-agua.json').then(d => d.direcciones as number[]).catch(() => null);
+    Promise.all([cargar('/data/malaga/malaga-zonas-inundacion.geojson'), direcciones])
+      .then(([data, dirs]) => { direccionesAguaRef.current = dirs; zonasInundacionRef.current = data; setZonasInundacionListas(true); })
       .catch(error => { if (error.name !== 'AbortError') console.warn('No se pudieron cargar las zonas de inundación', error); });
     return () => controller.abort();
   }, [lluviaActiva]);
+
+  // Afección por lluvias: zonas de agua sobre calzada (mismas que en Mapa 2D). Se crean una sola vez y la
+  // intensidad se lee en cada frame, así el agua no parpadea cuando la simulación avanza y rehace los marcadores.
+  const aguaActiva = lluviaActiva && (simulacionVisual?.intensidad ?? 0) >= 0.04;
+  const intensidadAguaRef = useRef(1);
+  intensidadAguaRef.current = Math.max(0.15, Math.min(1, simulacionVisual?.intensidad ?? 1));
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    const zonasAgua = zonasInundacionRef.current;
+    if (!aguaActiva || !zonasAgua || !viewer || viewer.isDestroyed()) return;
+    const estilos = { alto: ['#0369a1', 0.8], medio: ['#0ea5e9', 0.55], bajo: ['#7dd3fc', 0.4] } as const;
+    const twinOpen = hiddenOperationalEntitiesRef.current.size > 0;
+    const entidades: Entity[] = [];
+    const materiales = new Map<string, FloodFlowMaterialProperty>();
+    let indicePoligono = 0;
+    zonasAgua.features.forEach((feature, fi) => {
+      const [fill, opacidad] = estilos[feature.properties.riesgo];
+      const base = Color.fromCssColorString(fill);
+      const color = new Color();
+      const colorActual = () => Color.fromAlpha(base, opacidad * (0.35 + 0.65 * intensidadAguaRef.current), color);
+      const poligonos = feature.geometry.type === 'MultiPolygon'
+        ? feature.geometry.coordinates as number[][][][]
+        : [feature.geometry.coordinates as number[][][]];
+      poligonos.forEach((anillos, pi) => {
+        const sentido = direccionesAguaRef.current?.[indicePoligono++];
+        // Agua en movimiento hacia el arroyo/mar más cercano; los tramos diminutos quedan en color plano.
+        let material: any;
+        if (sentido !== undefined && anillos[0].length >= 8) {
+          const clave = `${fi}-${sentido}`;
+          if (!materiales.has(clave)) materiales.set(clave, new FloodFlowMaterialProperty(colorActual, sentido, () => (flowPhaseRef.current % 40) / 40));
+          material = materiales.get(clave);
+        } else {
+          material = new ColorMaterialProperty(new CallbackProperty(colorActual, false) as any);
+        }
+        const entity = viewer.entities.add({
+          id: `lluvia-${fi}-${pi}`,
+          name: `Posible acumulación de agua · riesgo ${feature.properties.riesgo}`,
+          polygon: { hierarchy: crearJerarquia(anillos), height: 1, material },
+        } as any);
+        if (twinOpen) {
+          hiddenOperationalEntitiesRef.current.set(entity.id, true);
+          entity.show = false;
+        }
+        entidades.push(entity);
+      });
+    });
+    viewer.scene.requestRender();
+    return () => {
+      if (viewer.isDestroyed()) return;
+      entidades.forEach(entity => viewer.entities.remove(entity));
+      viewer.scene.requestRender();
+    };
+  }, [aguaActiva, zonasInundacionListas]);
 
   // Anima las líneas de flujo (Cesium renderiza bajo demanda, así que se pide un frame por paso).
   const flujoActivo = Boolean(simulacionVisual && simulacionVisual.escenarioId !== 'base' && simulacionVisual.intensidad >= 0.04);

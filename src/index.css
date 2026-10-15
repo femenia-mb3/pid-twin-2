@@ -175,6 +175,20 @@
   75%, 100% { transform: scale(1.08); box-shadow: 0 0 0 16px transparent; }
 }
 
+/* Agua en movimiento dentro de las zonas inundadas: relleno con patrón SVG animado (ver MapViewer). */
+.flood-flow-0 { fill: url(#flood-flow-0) !important; pointer-events: none; }
+.flood-flow-1 { fill: url(#flood-flow-1) !important; pointer-events: none; }
+.flood-flow-2 { fill: url(#flood-flow-2) !important; pointer-events: none; }
+.flood-flow-3 { fill: url(#flood-flow-3) !important; pointer-events: none; }
+.flood-flow-4 { fill: url(#flood-flow-4) !important; pointer-events: none; }
+.flood-flow-5 { fill: url(#flood-flow-5) !important; pointer-events: none; }
+.flood-flow-6 { fill: url(#flood-flow-6) !important; pointer-events: none; }
+.flood-flow-7 { fill: url(#flood-flow-7) !important; pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .flood-flow { display: none; }
+}
+
 .simulation-rain-overlay {
   overflow: hidden;
   background-image: repeating-linear-gradient(108deg, transparent 0 18px, rgba(2, 132, 199, 0.7) 19px 21px, transparent 22px 38px);

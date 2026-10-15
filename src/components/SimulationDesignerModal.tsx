@@ -15,9 +15,10 @@ import {
   Layers,
   FileCheck2,
   FileCode2,
+  Database,
 } from 'lucide-react';
 import { Destino, ZonaDestino } from '../types/ontology';
-import { ReusableModelTemplate } from '../types/interoperability';
+import { InteroperabilityConnector, ReusableModelTemplate } from '../types/interoperability';
 import { ScenarioDefinition, ScenarioDraftInput, createScenarioDraft } from '../types/scenarioStudio';
 import { MODELO_EDITOR_VISUAL } from '../services/modelFlows';
 import { applyModelProfile, createSessionScenario, packageToSessionScenario } from '../services/sessionScenarios';
@@ -45,6 +46,7 @@ export const SimulationDesignerModal: React.FC<SimulationDesignerModalProps> = (
   const [activeTab, setActiveTab] = useState<'catalog' | 'upload_package' | 'own_model'>('catalog');
   const [models, setModels] = useState<ReusableModelTemplate[]>([]);
   const [selectedModel, setSelectedModel] = useState<ReusableModelTemplate | null>(null);
+  const [connectors, setConnectors] = useState<InteroperabilityConnector[]>([]);
   const [selectedZoneIds, setSelectedZoneIds] = useState<string[]>([]);
   const [modelParameters, setModelParameters] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(false);
@@ -71,6 +73,11 @@ export const SimulationDesignerModal: React.FC<SimulationDesignerModalProps> = (
     setMessage(null);
     setSelectedZoneIds(zones.slice(0, 2).map(z => z.id));
     setEditorDraft({ ...createScenarioDraft(destination.id, tenantId), inputs: { ...createScenarioDraft(destination.id, tenantId).inputs, zoneIds: zones.slice(0, 2).map(z => z.id) } });
+
+    fetch(`/api/interoperability/connectors?destino=${encodeURIComponent(destination.id)}`)
+      .then(res => res.json())
+      .then(data => setConnectors(Array.isArray(data.connectors) ? data.connectors : []))
+      .catch(() => setConnectors([]));
 
     fetch(`/api/models/reusable?destino=${destination.id}`)
       .then(res => res.json())
@@ -293,7 +300,7 @@ evidence:
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-7xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         
         {/* Cabecera */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
@@ -370,7 +377,7 @@ evidence:
           <div className="flex-1 flex overflow-hidden">
             
             {/* Lista de Modelos */}
-            <div className="w-1/3 border-r border-slate-200 overflow-y-auto p-4 space-y-3 bg-slate-50/50">
+            <div className="w-1/4 shrink-0 border-r border-slate-200 overflow-y-auto p-4 space-y-3 bg-slate-50/50">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Plantillas Disponibles</span>
               {loading ? (
                 <div className="text-center py-8 text-xs text-slate-400">Cargando catálogo...</div>
@@ -393,7 +400,7 @@ evidence:
                     </div>
                     <h4 className="text-xs font-bold text-slate-800">{m.title}</h4>
                     <p className="text-[11px] text-slate-500 line-clamp-2 mt-1">{m.summary}</p>
-                    
+
                     <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
                       <span className="flex items-center gap-1 font-semibold text-slate-600">
                         <Building2 className="w-3 h-3 text-red-500" />
@@ -407,7 +414,7 @@ evidence:
             </div>
 
             {/* Detalle y Parametrización */}
-            <div className="w-2/3 overflow-y-auto p-6 space-y-6">
+            <div className="flex-1 min-w-0 overflow-y-auto p-6 space-y-6">
               {selectedModel ? (
                 <>
                   <div className="space-y-2">
@@ -496,6 +503,57 @@ evidence:
                 </div>
               )}
             </div>
+
+            {/* Panel derecho: requisitos de datos (como en Conectores PID → Catálogo de modelos) */}
+            {selectedModel && (
+              <aside className="w-80 shrink-0 overflow-y-auto border-l border-slate-200 bg-slate-50 p-4 space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-700">Requisitos de datos</span>
+                    <h3 className="mt-1 text-sm font-bold text-slate-800">{selectedModel.title}</h3>
+                  </div>
+                  <Database className="h-4 w-4 text-cyan-600" />
+                </div>
+                {selectedModel.ruleSummary && <p className="text-[11px] leading-relaxed text-slate-600">{selectedModel.ruleSummary}</p>}
+
+                <div className="text-[11px]">
+                  <span className="font-bold text-slate-700">Fuentes mínimas</span>
+                  <ul className="mt-1 space-y-1 text-slate-600">
+                    {(selectedModel.sourceRequirements ?? []).map(requirement => <li key={requirement}>• {requirement}</li>)}
+                  </ul>
+                </div>
+
+                <div className="space-y-2 border-t border-slate-200 pt-3">
+                  <span className="block text-[11px] font-bold text-slate-700">Conectores del destino para este modelo</span>
+                  {(selectedModel.requiredLanes ?? []).map(lane => {
+                    const laneConnectors = connectors.filter(connector => connector.lane === lane);
+                    return (
+                      <div key={lane} className="space-y-1">
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-cyan-800">{lane.replaceAll('_', ' ')}</span>
+                        {laneConnectors.length === 0 ? (
+                          <p className="rounded-lg border border-dashed border-slate-300 bg-white p-2 text-[10px] text-slate-400">Sin conectores en este carril.</p>
+                        ) : laneConnectors.map(connector => {
+                          const unavailable = connector.status === 'PENDIENTE_AUTORIZACION';
+                          return (
+                            <div key={connector.id} className={`rounded-lg border p-2 text-[10px] ${unavailable ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-slate-200 bg-white text-slate-700'}`}>
+                              <b>{connector.title}</b>
+                              <br />
+                              {unavailable ? 'Pendiente de autorización.' : connector.status.replaceAll('_', ' ')}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {selectedModel.evidence?.url && (
+                  <a href={selectedModel.evidence.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] font-semibold text-cyan-700 hover:text-cyan-900">
+                    <FileText className="h-3 w-3" /> Evidencia de la plantilla
+                  </a>
+                )}
+              </aside>
+            )}
 
           </div>
         )}

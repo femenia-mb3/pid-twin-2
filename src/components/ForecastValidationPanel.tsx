@@ -44,14 +44,14 @@ export const ForecastValidationPanel: React.FC<ForecastValidationPanelProps> = (
     <div className="space-y-3">
       <section className="rounded-xl border border-fuchsia-200 bg-fuchsia-50/40 p-3 shadow-sm">
         <div className="flex items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-fuchsia-800">
               <FlaskConical className="h-3.5 w-3.5" />
               Laboratorio de predicción
             </div>
             <p className="mt-1 text-[10px] text-slate-600">Histórico, predicción y observado generados con datos sintéticos reproducibles.</p>
           </div>
-          <span className="rounded-full bg-fuchsia-600 px-2 py-1 text-[9px] font-bold text-white">{experiment.etiquetaDatos}</span>
+          <span className="shrink-0 whitespace-nowrap rounded-full bg-fuchsia-600 px-2 py-1 text-[9px] font-bold text-white">{experiment.etiquetaDatos}</span>
         </div>
         <p className="mt-2 rounded-md border border-fuchsia-100 bg-white/80 px-2 py-1.5 text-[10px] text-slate-500">No representa calibración real. Se sustituye por telemetría observada cuando el destino conecte series históricas.</p>
       </section>

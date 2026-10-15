@@ -79,6 +79,18 @@ export const MapViewer: React.FC<MapViewerProps> = ({
     return () => { cancelado = true; };
   }, [lluviaActiva, zonasInundacion]);
 
+  // Sentido de la corriente (0-7, pasos de 45°) de cada tramo inundado hacia el arroyo/mar más cercano.
+  const [flujosAgua, setFlujosAgua] = useState<{ direcciones: number[] } | null>(null);
+  useEffect(() => {
+    if (!lluviaActiva || flujosAgua) return;
+    let cancelado = false;
+    fetch('/data/malaga/malaga-flujos-agua.json')
+      .then(r => (r.ok ? r.json() : null))
+      .then(datos => { if (!cancelado && datos?.direcciones) setFlujosAgua(datos); })
+      .catch(() => {});
+    return () => { cancelado = true; };
+  }, [lluviaActiva, flujosAgua]);
+
   const mapInstanceRef = useRef<any>(null);
   const layersGroupRef = useRef<any>({});
   const [edificiosCatastro, setEdificiosCatastro] = useState<any>(null);
@@ -415,6 +427,21 @@ export const MapViewer: React.FC<MapViewerProps> = ({
           capa.bindTooltip(`<b>Posible acumulación de agua</b><br/>Riesgo ${estilo.etiqueta} · calzada sin edificios<br/><b>${Math.round(intensidad * 100)}% de intensidad</b>`, { sticky: true });
           gSimulacion.addLayer(capa);
         });
+        if (flujosAgua) {
+          // Textura de agua que corre dentro de cada tramo inundado hacia el arroyo/mar más cercano.
+          let indice = 0;
+          zonasInundacion.features.forEach((feature: any) => {
+            const poligonos = feature.geometry.type === 'MultiPolygon' ? feature.geometry.coordinates : [feature.geometry.coordinates];
+            poligonos.forEach((coordenadas: any) => {
+              const sentido = flujosAgua.direcciones[indice++] ?? 0;
+              if (coordenadas[0].length < 8) return; // tramos diminutos: sin textura animada
+              gSimulacion.addLayer(L.geoJSON({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: coordenadas } } as any, {
+                interactive: false,
+                style: { stroke: false, fillOpacity: 0.35 + 0.65 * intensidad, className: `flood-flow flood-flow-${sentido}` }
+              }));
+            });
+          });
+        }
       }
 
       simulacionVisual.flujos?.forEach(flujoModelo => {
@@ -462,7 +489,7 @@ export const MapViewer: React.FC<MapViewerProps> = ({
       });
     }
 
-  }, [zonas, recursos, sensores, capasActivas, tipoMapaCalor, rutasDesvio, nivelVisualizacion, cartografiaBase, simulacionVisual, zonasInundacion]);
+  }, [zonas, recursos, sensores, capasActivas, tipoMapaCalor, rutasDesvio, nivelVisualizacion, cartografiaBase, simulacionVisual, zonasInundacion, flujosAgua]);
 
   // 4b. Edificios de Catastro: la capa se construye una sola vez por cartografía; los KPI solo la recolorean.
   const capasEdificiosRef = useRef<{ layer: any; punto: PuntoEdificio; baseFill: string }[]>([]);
@@ -558,6 +585,20 @@ export const MapViewer: React.FC<MapViewerProps> = ({
     <div className="relative w-full h-full">
       {/* Contenedor del mapa Leaflet */}
       <div ref={mapContainerRef} className="w-full h-full z-0" />
+
+      {/* Texturas de agua en movimiento (8 sentidos de corriente), usadas como relleno de las zonas inundadas. */}
+      <svg width="0" height="0" className="absolute pointer-events-none" aria-hidden="true">
+        <defs>
+          {Array.from({ length: 8 }, (_, k) => (
+            <pattern key={k} id={`flood-flow-${k}`} width="40" height="20" patternUnits="userSpaceOnUse" patternTransform={`rotate(${k * 45})`}>
+              <g>
+                <path d="M-40 10 q10 -5 20 0 t20 0 t20 0 t20 0" fill="none" stroke="#e0f2fe" strokeOpacity="0.8" strokeWidth="1.6" strokeLinecap="round" />
+                <animateTransform attributeName="transform" type="translate" from="0 0" to="40 0" dur="5s" repeatCount="indefinite" />
+              </g>
+            </pattern>
+          ))}
+        </defs>
+      </svg>
 
       {simulacionVisual.escenarioId !== 'base' && (
         <div className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2 rounded-xl border border-white/80 bg-slate-950/88 px-4 py-2 text-center text-white shadow-xl backdrop-blur">

@@ -12,6 +12,10 @@ interface OperationalSnapshotPanelProps {
   onRuleSelect: (rule: string) => void;
   requestedRules?: string[];
   onRequestedRuleSelect?: () => void;
+  // Simulaciones creadas por el usuario: se listan junto a las reglas del modelo.
+  userSimulations?: { id: string; name: string }[];
+  activeSimulationId?: string | null;
+  onUserSimulationSelect?: (id: string) => void;
   recommendation: string;
 }
 
@@ -30,6 +34,9 @@ export const OperationalSnapshotPanel: React.FC<OperationalSnapshotPanelProps> =
   onRuleSelect,
   requestedRules = [],
   onRequestedRuleSelect,
+  userSimulations = [],
+  activeSimulationId = null,
+  onUserSimulationSelect,
   recommendation
 }) => {
   const visitorDelta = simulated.visitors - current.visitors;
@@ -112,6 +119,28 @@ export const OperationalSnapshotPanel: React.FC<OperationalSnapshotPanelProps> =
                   </span>
                 ) : (
                   <ArrowRight className="h-3 w-3 text-cyan-500" />
+                )}
+              </button>
+            );
+          })}
+          {userSimulations.map((sim) => {
+            const isActive = activeSimulationId === sim.id;
+            return (
+              <button
+                key={sim.id}
+                type="button"
+                aria-pressed={isActive}
+                onClick={() => onUserSimulationSelect?.(sim.id)}
+                className="flex items-center justify-between gap-2 rounded-md border border-cyan-100 bg-white px-2 py-1.5 text-left text-[9px] font-semibold text-slate-600 transition-all hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-800"
+              >
+                <span className="truncate">{sim.name}</span>
+                {isActive ? (
+                  <span className="flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[8px] font-bold uppercase text-emerald-700">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    Activo
+                  </span>
+                ) : (
+                  <ArrowRight className="h-3 w-3 shrink-0 text-cyan-500" />
                 )}
               </button>
             );

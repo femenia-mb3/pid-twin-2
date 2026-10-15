@@ -95,6 +95,10 @@ import {
 import { KpiMapa } from './services/kpiBuildingColors';
 
 // Simulaciones pendientes de desarrollo: se listan como "Solicitado" en el panel izquierdo (modelos por destino).
+// Red de drenaje de referencia (Escenario 3): con estos valores la lluvia produce el efecto base.
+const DRENAJE_REFERENCIA = { eficiencia: 70, imbornales: 4000, caudalLs: 20 };
+const CAPACIDAD_DRENAJE_REFERENCIA_LS = DRENAJE_REFERENCIA.imbornales * DRENAJE_REFERENCIA.caudalLs * (DRENAJE_REFERENCIA.eficiencia / 100);
+
 const SIMULACIONES_SOLICITADAS = [
   { nombre: 'Playas', descripcion: 'Ocupación y capacidad de carga de playas y frente litoral.' },
   { nombre: 'Cicloturismo', descripcion: 'Flujos y demanda de rutas ciclistas y servicios asociados.' }
@@ -156,6 +160,9 @@ export default function App() {
   const [porcentajeDesembarco, setPorcentajeDesembarco] = useState<number>(78);
   const [asistentesEvento, setAsistentesEvento] = useState<number>(32000);
   const [precipitacionMmH, setPrecipitacionMmH] = useState<number>(45);
+  const [eficienciaDrenaje, setEficienciaDrenaje] = useState<number>(DRENAJE_REFERENCIA.eficiencia);
+  const [numeroImbornales, setNumeroImbornales] = useState<number>(DRENAJE_REFERENCIA.imbornales);
+  const [caudalImbornalLs, setCaudalImbornalLs] = useState<number>(DRENAJE_REFERENCIA.caudalLs);
 
   // 5. Modales e interacciones
   const [elementoSeleccionado, setElementoSeleccionado] = useState<{ tipo: any; data: any } | null>(null);
@@ -225,14 +232,21 @@ export default function App() {
     return 0;
   }, [claveEscenario, horaSimulacion]);
 
+  // Capacidad de evacuación de la red de imbornales (L/s) = nº de imbornales x caudal medio x eficiencia.
+  const capacidadDrenajeLs = numeroImbornales * caudalImbornalLs * (eficienciaDrenaje / 100);
+
   const magnitudEscenario = useMemo(() => {
     if (claveEscenario === 'presion-alta-demanda') {
       return Math.min(1.5, (numeroCruceros / 2) * (pasajerosCruceros / 9500) * (porcentajeDesembarco / 78));
     }
     if (claveEscenario === 'evento-local') return Math.min(1.5, asistentesEvento / 32000);
-    if (claveEscenario === 'episodio-meteorologico') return Math.min(1.5, precipitacionMmH / 45);
+    if (claveEscenario === 'episodio-meteorologico') {
+      // Menos capacidad de evacuación que la de referencia => más agua acumulada para la misma lluvia.
+      const presionDrenaje = Math.min(1.8, Math.max(0.4, Math.pow(CAPACIDAD_DRENAJE_REFERENCIA_LS / Math.max(1, capacidadDrenajeLs), 0.6)));
+      return Math.min(1.5, (precipitacionMmH / 45) * presionDrenaje);
+    }
     return 0;
-  }, [claveEscenario, numeroCruceros, pasajerosCruceros, porcentajeDesembarco, asistentesEvento, precipitacionMmH]);
+  }, [claveEscenario, numeroCruceros, pasajerosCruceros, porcentajeDesembarco, asistentesEvento, precipitacionMmH, capacidadDrenajeLs]);
 
   const parametrosBaseSimulacion: ParametrosDestinoConfigurables = useMemo(() => ({
     umbralSaturacionAlerta: umbralAlerta,
@@ -435,6 +449,9 @@ export default function App() {
     setPorcentajeDesembarco(78);
     setAsistentesEvento(32000);
     setPrecipitacionMmH(45);
+    setEficienciaDrenaje(DRENAJE_REFERENCIA.eficiencia);
+    setNumeroImbornales(DRENAJE_REFERENCIA.imbornales);
+    setCaudalImbornalLs(DRENAJE_REFERENCIA.caudalLs);
   };
 
   // Ids de escenario según el catálogo activo (v3 en destinos demostradores, presets generados en el resto).
@@ -774,6 +791,9 @@ export default function App() {
           onRequestedRuleSelect={() => setModalInteroperabilidadAbierto(true)}
           activeRule={reglaModeloVisible}
           requestedRules={SIMULACIONES_SOLICITADAS.map(sim => sim.nombre)}
+          userSimulations={escenariosSesionDestino.map(escenario => ({ id: escenario.id, name: escenario.name }))}
+          activeSimulationId={escenarioEditorActivo?.id ?? null}
+          onUserSimulationSelect={(id) => { handleSeleccionarEscenario(id); setPestañaLateral('simulador'); }}
           onRuleSelect={handleAplicarReglaModelo}
           recommendation={resultadoSimulacion.recomendacionesGestion[0] || 'Mantener la monitorización ordinaria.'}
         />
@@ -969,14 +989,14 @@ export default function App() {
               
               {/* Selector de Escenarios What-If */}
               <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-2.5">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
                   <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">
                     Escenario
                   </span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center justify-end gap-2">
                     <button
                       onClick={() => setModalDisenadorAbierto(true)}
-                      className="flex items-center space-x-1 rounded-md bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 px-2.5 py-1 text-[10px] font-bold text-white shadow-sm transition-all"
+                      className="flex shrink-0 items-center space-x-1 whitespace-nowrap rounded-md bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 px-2.5 py-1 text-[10px] font-bold text-white shadow-sm transition-all"
                       title="Diseñar simulación o importar modelo del catálogo PID"
                     >
                       <Sliders className="h-3 w-3" />
@@ -1105,10 +1125,24 @@ export default function App() {
                 )}
 
                 {claveEscenario === 'episodio-meteorologico' && (
-                  <label className="block border-t border-slate-100 pt-2 text-[9px] font-semibold text-slate-600">Intensidad de precipitación
+                  <div className="space-y-2 border-t border-slate-100 pt-2">
+                  <label className="block text-[9px] font-semibold text-slate-600">Intensidad de precipitación
                     <input type="range" min="10" max="80" step="5" value={precipitacionMmH} onChange={(e) => setPrecipitacionMmH(Number(e.target.value))} className="mt-1.5 h-1.5 w-full cursor-pointer accent-sky-500" />
                     <span className="mt-1 block text-right font-mono text-[11px] font-bold text-sky-700">{precipitacionMmH} mm/h</span>
                   </label>
+                  <label className="block text-[9px] font-semibold text-slate-600">Índice de eficiencia de drenaje urbano
+                    <input type="range" min="20" max="100" step="5" value={eficienciaDrenaje} onChange={(e) => setEficienciaDrenaje(Number(e.target.value))} className="mt-1.5 h-1.5 w-full cursor-pointer accent-sky-500" />
+                    <span className="mt-1 block text-right font-mono text-[11px] font-bold text-sky-700">{eficienciaDrenaje}%</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-[9px] font-semibold text-slate-600">Imbornales en la ciudad<input type="number" min="500" max="20000" step="100" value={numeroImbornales} onChange={(e) => setNumeroImbornales(Math.max(0, Number(e.target.value)))} className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-slate-800" /></label>
+                    <label className="text-[9px] font-semibold text-slate-600">Caudal medio (L/s por imbornal)<input type="number" min="1" max="60" step="1" value={caudalImbornalLs} onChange={(e) => setCaudalImbornalLs(Math.max(0, Number(e.target.value)))} className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-slate-800" /></label>
+                  </div>
+                  <div className="flex items-center justify-between rounded bg-sky-50 px-2 py-1 text-[9px] text-sky-900">
+                    <span className="font-medium">Capacidad de evacuación de la red</span>
+                    <span className="font-mono font-bold">{Math.round(capacidadDrenajeLs).toLocaleString('es-ES')} L/s</span>
+                  </div>
+                  </div>
                 )}
 
                 <div className="flex items-center justify-between rounded-lg bg-slate-50 border border-slate-200 px-2 py-1.5 text-[10px]">
