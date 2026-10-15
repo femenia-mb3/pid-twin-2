@@ -104,15 +104,8 @@ import { KpiMapa } from './services/kpiBuildingColors';
 // Pasajeros equivalentes del ajuste manual por defecto (2 llegadas x 9.500): magnitud 1 del Escenario 1.
 const PASAJEROS_REFERENCIA_CRUCEROS = 2 * 9500;
 
-// Espacios naturales y senderos: el coeficiente de terreno reduce la capacidad efectiva del sendero.
-const TERRENO_SENDERO = {
-  muy_buena: { etiqueta: 'Muy buena', factor: 1 },
-  buena: { etiqueta: 'Buena', factor: 0.85 },
-  mala: { etiqueta: 'Mala', factor: 0.6 },
-  muy_mala: { etiqueta: 'Muy mala', factor: 0.35 },
-} as const;
-type CondicionTerreno = keyof typeof TERRENO_SENDERO;
-const SENDERO_REFERENCIA = { capacidad: 600, sensibilidad: 1.2, visitantes: 500, terreno: 'buena' as CondicionTerreno };
+// Espacios naturales y senderos: valores de referencia del catálogo.
+const SENDERO_REFERENCIA = { capacidad: 600, sensibilidad: 1.2, visitantes: 500 };
 const DRENAJE_REFERENCIA ={ eficiencia: 70, imbornales: 4000, caudalLs: 20 };
 const CAPACIDAD_DRENAJE_REFERENCIA_LS = DRENAJE_REFERENCIA.imbornales * DRENAJE_REFERENCIA.caudalLs * (DRENAJE_REFERENCIA.eficiencia / 100);
 
@@ -192,7 +185,6 @@ export default function App() {
   const [capacidadSendero, setCapacidadSendero] = useState<number>(SENDERO_REFERENCIA.capacidad);
   const [factorSensibilidad, setFactorSensibilidad] = useState<number>(SENDERO_REFERENCIA.sensibilidad);
   const [visitantesSendero, setVisitantesSendero] = useState<number>(SENDERO_REFERENCIA.visitantes);
-  const [terrenoSendero, setTerrenoSendero] = useState<CondicionTerreno>(SENDERO_REFERENCIA.terreno);
   // Escenario 2: recintos (nº y aforo medio) y ventana horaria del evento; el CSV de recintos puede rellenarlos.
   const [numeroRecintos, setNumeroRecintos] = useState<number>(8);
   const [capacidadRecinto, setCapacidadRecinto] = useState<number>(4000);
@@ -451,9 +443,9 @@ export default function App() {
     return escenariosDisponibles.find(escenario => escenario.id === escenarioSeleccionadoId) || escenariosDisponibles[0];
   }, [escenarioSeleccionadoId, escenariosDisponibles]);
 
-  // Espacios naturales y senderos: capacidad efectiva = capacidad x coeficiente de terreno / factor de sensibilidad.
+  // Espacios naturales y senderos: capacidad efectiva = capacidad del sendero / factor de sensibilidad.
   const esEspacioNatural = escenarioEditorActivo?.sourceModelId === 'modelo_espacios_naturales';
-  const capacidadEfectivaSendero = Math.round(capacidadSendero * TERRENO_SENDERO[terrenoSendero].factor / Math.max(0.1, factorSensibilidad));
+  const capacidadEfectivaSendero = Math.round(capacidadSendero / Math.max(0.1, factorSensibilidad));
   const ocupacionSendero = capacidadEfectivaSendero > 0 ? visitantesSendero / capacidadEfectivaSendero : 1.5;
   const parametrosSimulacion = escenarioEditorBinding?.scenario.id === escenarioActual.id
     ? (esEspacioNatural
@@ -595,7 +587,6 @@ export default function App() {
     setCapacidadSendero(SENDERO_REFERENCIA.capacidad);
     setFactorSensibilidad(SENDERO_REFERENCIA.sensibilidad);
     setVisitantesSendero(SENDERO_REFERENCIA.visitantes);
-    setTerrenoSendero(SENDERO_REFERENCIA.terreno);
     setNumeroRecintos(8);
     setCapacidadRecinto(4000);
     setHoraInicioEvento(18);
@@ -1503,26 +1494,13 @@ export default function App() {
                 {esEspacioNatural && (
                   <div className="space-y-2 border-t border-slate-100 pt-2">
                     <div className="grid grid-cols-2 gap-2">
-                      <label className="text-[9px] font-semibold text-slate-600">Capacidad del sendero (personas/día)<input type="number" min="1" max="20000" step="50" value={capacidadSendero} onChange={(e) => setCapacidadSendero(Math.max(0, Number(e.target.value)))} className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-slate-800" /></label>
-                      <label className="text-[9px] font-semibold text-slate-600">Visitantes previstos<input type="number" min="0" max="50000" step="10" value={visitantesSendero} onChange={(e) => setVisitantesSendero(Math.max(0, Number(e.target.value)))} className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-slate-800" /></label>
+                      <label className="flex flex-col justify-between text-[9px] font-semibold text-slate-600">Capacidad del sendero (personas/día)<input type="number" min="1" max="20000" step="50" value={capacidadSendero} onChange={(e) => setCapacidadSendero(Math.max(0, Number(e.target.value)))} className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-slate-800" /></label>
+                      <label className="flex flex-col justify-between text-[9px] font-semibold text-slate-600">Visitantes previstos<input type="number" min="0" max="50000" step="10" value={visitantesSendero} onChange={(e) => setVisitantesSendero(Math.max(0, Number(e.target.value)))} className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-slate-800" /></label>
                     </div>
                     <label className="block text-[9px] font-semibold text-slate-600">Factor de sensibilidad ambiental
                       <input type="range" min="0.5" max="2" step="0.1" value={factorSensibilidad} onChange={(e) => setFactorSensibilidad(Number(e.target.value))} className="mt-1.5 h-1.5 w-full cursor-pointer accent-green-600" />
                       <span className="mt-1 block text-right font-mono text-[11px] font-bold text-green-700">{factorSensibilidad.toFixed(1)}</span>
                     </label>
-                    <div className="space-y-1">
-                      <span className="block text-[9px] font-semibold text-slate-600">Condición del terreno</span>
-                      <div className="grid grid-cols-4 gap-1">
-                        {(Object.keys(TERRENO_SENDERO) as CondicionTerreno[]).map(clave => (
-                          <button
-                            key={clave}
-                            type="button"
-                            onClick={() => setTerrenoSendero(clave)}
-                            className={`rounded-md border px-1 py-1 text-[9px] font-bold transition-colors ${terrenoSendero === clave ? 'border-green-600 bg-green-600 text-white shadow-sm' : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-white'}`}
-                          >{TERRENO_SENDERO[clave].etiqueta}</button>
-                        ))}
-                      </div>
-                    </div>
                     <div className="space-y-1 rounded border border-green-200 bg-white px-2 py-1 text-[9px] text-green-900">
                       <div className="flex items-center justify-between">
                         <span className="font-medium">Capacidad efectiva del sendero</span>
