@@ -3,6 +3,7 @@ import { RapidResponseAgentModal } from "./components/RapidResponseAgentModal";
 import { MacroOptimizationModal } from "./components/MacroOptimizationModal";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TIPOS_CRUCERO } from './data/cruiseShipTypes';
+import { agregarCruceros, descargarPlantillaCrucerosCsv, parsearCrucerosCsv, type BuqueCsv } from './services/cruiseCsv';
 import type { TraficoPuertoMalaga } from './services/malagaPortTrafficService';
 import { 
   DESTINOS_DEMO, 
@@ -162,7 +163,15 @@ export default function App() {
   const [reproduciendoSimulacion, setReproduciendoSimulacion] = useState<boolean>(false);
   const [numeroCruceros, setNumeroCruceros] = useState<number>(2);
   // Escenario 1: parámetros fijos, flota por tipos de crucero o tráfico real del puerto de Málaga.
-  const [modoCruceros, setModoCruceros] = useState<'manual' | 'flota' | 'tiempo_real'>('manual');
+  const [modoCruceros, setModoCruceros] = useState<'manual' | 'flota' | 'tiempo_real' | 'archivo'>('manual');
+  // Cruceros importados desde un CSV (arrastrar y soltar en el panel derecho).
+  const [crucerosCsv, setCrucerosCsv] = useState<{ archivo: string; buques: BuqueCsv[]; avisos: string[] } | null>(null);
+  const [fechaCsv, setFechaCsv] = useState<string>('');
+  const [errorCsv, setErrorCsv] = useState<string | null>(null);
+  const [arrastrandoCsv, setArrastrandoCsv] = useState<boolean>(false);
+  const buquesCsvFecha = useMemo(() => (crucerosCsv?.buques ?? []).filter(b => b.fecha === fechaCsv), [crucerosCsv, fechaCsv]);
+  const agregadoCsv = useMemo(() => agregarCruceros(buquesCsvFecha), [buquesCsvFecha]);
+  const fechasCsv = useMemo(() => [...new Set((crucerosCsv?.buques ?? []).map(b => b.fecha))].sort(), [crucerosCsv]);
   const [flotaCruceros, setFlotaCruceros] = useState<Record<string, number>>({ mediano: 1, grande: 1 });
   const [traficoPuerto, setTraficoPuerto] = useState<TraficoPuertoMalaga | null>(null);
   const [traficoPuertoEstado, setTraficoPuertoEstado] = useState<'idle' | 'cargando' | 'error'>('idle');
@@ -227,6 +236,7 @@ export default function App() {
   const claveEscenario = ({ crucero_masivo: 'presion-alta-demanda', evento_cultural: 'evento-local', episodio_meteo: 'episodio-meteorologico' } as Record<string, string>)[escenarioSeleccionadoId] ?? escenarioSeleccionadoId;
   const intensidadTemporal = useMemo(() => {
     if (claveEscenario === 'presion-alta-demanda') {
+      if (modoCruceros === 'archivo') return agregadoCsv.intensidad[horaSimulacion] ?? 0;
       const curva = [0.08, 0.2, 0.55, 1, 0.92, 0.72, 0.48, 0.28, 0.14];
       return curva[Math.max(0, Math.min(curva.length - 1, horaSimulacion - 8))] ?? (horaSimulacion < 8 ? 0.04 : 0.08);
     }
@@ -240,11 +250,13 @@ export default function App() {
       return distanciaPico > 4 ? 0.05 : Math.max(0.12, 1 - distanciaPico * 0.24);
     }
     return 0;
-  }, [claveEscenario, horaSimulacion]);
+  }, [claveEscenario, horaSimulacion, modoCruceros, agregadoCsv]);
 
   // Pasajeros que llegan según el modo: flota elegida por tipos o buques detectados en el puerto.
   const pasajerosModoCruceros = modoCruceros === 'flota'
     ? TIPOS_CRUCERO.reduce((total, tipo) => total + (flotaCruceros[tipo.id] ?? 0) * tipo.capacidad, 0)
+    : modoCruceros === 'archivo'
+      ? buquesCsvFecha.reduce((total, buque) => total + buque.pasajeros, 0)
     : modoCruceros === 'tiempo_real'
       ? (traficoPuerto?.buques ?? []).reduce((total, buque) => total + buque.capacidad, 0)
       : 0;
@@ -268,11 +280,28 @@ export default function App() {
     return () => window.clearInterval(id);
   }, [modoCruceros, cargarTraficoPuerto]);
 
+  const cargarArchivoCruceros = useCallback(async (archivo: File | undefined) => {
+    if (!archivo) return;
+    try {
+      const { buques, avisos } = parsearCrucerosCsv(await archivo.text());
+      const primeraFecha = [...new Set(buques.map(b => b.fecha))].sort()[0];
+      setCrucerosCsv({ archivo: archivo.name, buques, avisos });
+      setFechaCsv(primeraFecha);
+      setModoCruceros('archivo');
+      setErrorCsv(null);
+      setHoraSimulacion(agregarCruceros(buques.filter(b => b.fecha === primeraFecha)).horaPico);
+      setReproduciendoSimulacion(false);
+    } catch (error) {
+      setErrorCsv(error instanceof Error ? error.message : 'No se pudo leer el archivo CSV.');
+    }
+  }, []);
+
   // Capacidad de evacuación de la red de imbornales (L/s) = nº de imbornales x caudal medio x eficiencia.
   const capacidadDrenajeLs = numeroImbornales * caudalImbornalLs * (eficienciaDrenaje / 100);
 
   const magnitudEscenario = useMemo(() => {
     if (claveEscenario === 'presion-alta-demanda') {
+      if (modoCruceros === 'archivo') return Math.min(1.5, agregadoCsv.pico / (PASAJEROS_REFERENCIA_CRUCEROS * 0.78));
       if (modoCruceros !== 'manual') return Math.min(1.5, (pasajerosModoCruceros / PASAJEROS_REFERENCIA_CRUCEROS) * (porcentajeDesembarco / 78));
       return Math.min(1.5, (numeroCruceros / 2) * (pasajerosCruceros / 9500) * (porcentajeDesembarco / 78));
     }
@@ -283,7 +312,7 @@ export default function App() {
       return Math.min(1.5, (precipitacionMmH / 45) * presionDrenaje);
     }
     return 0;
-  }, [claveEscenario, numeroCruceros, pasajerosCruceros, porcentajeDesembarco, modoCruceros, pasajerosModoCruceros, asistentesEvento, precipitacionMmH, capacidadDrenajeLs]);
+  }, [claveEscenario, numeroCruceros, pasajerosCruceros, porcentajeDesembarco, modoCruceros, pasajerosModoCruceros, agregadoCsv, asistentesEvento, precipitacionMmH, capacidadDrenajeLs]);
 
   const parametrosBaseSimulacion: ParametrosDestinoConfigurables = useMemo(() => ({
     umbralSaturacionAlerta: umbralAlerta,
@@ -1150,7 +1179,7 @@ export default function App() {
 
                 {claveEscenario === 'presion-alta-demanda' && (
                   <div className="flex gap-1 border-t border-slate-100 pt-2">
-                    {([['manual', 'Parámetros'], ['flota', 'Tipos de crucero'], ['tiempo_real', 'Puerto en tiempo real']] as const).map(([modo, etiqueta]) => (
+                    {([['manual', 'Parámetros'], ['flota', 'Tipos de crucero'], ['tiempo_real', 'Puerto en tiempo real'], ['archivo', 'Archivo CSV']] as const).map(([modo, etiqueta]) => (
                       <button
                         key={modo}
                         type="button"
@@ -1158,6 +1187,58 @@ export default function App() {
                         className={`flex-1 rounded-md border px-1 py-1 text-[9px] font-bold transition-colors ${modoCruceros === modo ? 'border-cyan-600 bg-cyan-600 text-white shadow-sm' : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-white'}`}
                       >{etiqueta}</button>
                     ))}
+                  </div>
+                )}
+
+                {claveEscenario === 'presion-alta-demanda' && modoCruceros === 'archivo' && (
+                  <div className="space-y-1.5">
+                    <label
+                      onDragOver={(e) => { e.preventDefault(); setArrastrandoCsv(true); }}
+                      onDragLeave={() => setArrastrandoCsv(false)}
+                      onDrop={(e) => { e.preventDefault(); setArrastrandoCsv(false); void cargarArchivoCruceros(e.dataTransfer.files[0]); }}
+                      className={`flex cursor-pointer flex-col items-center gap-0.5 rounded-lg border-2 border-dashed px-2 py-3 text-center text-[10px] transition-colors ${arrastrandoCsv ? 'border-cyan-600 bg-cyan-50 text-cyan-800' : 'border-slate-300 bg-slate-50 text-slate-600 hover:border-cyan-400'}`}
+                    >
+                      <span className="font-bold">Arrastre aquí un archivo CSV</span>
+                      <span className="text-[9px] text-slate-500">o haga clic para seleccionarlo</span>
+                      <input type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => { void cargarArchivoCruceros(e.target.files?.[0]); e.target.value = ''; }} />
+                    </label>
+                    <button type="button" onClick={descargarPlantillaCrucerosCsv} className="w-full rounded-md border border-cyan-200 bg-cyan-50 px-2 py-1 text-[10px] font-bold text-cyan-800 hover:bg-cyan-100">
+                      ⬇ Descargar archivo de ejemplo
+                    </button>
+                    <p className="text-[8px] leading-snug text-slate-400">Columnas: nombre; pasajeros; fecha; hora_llegada; hora_salida; porcentaje_desembarco (opcional, 78 por defecto).</p>
+                    {errorCsv && <p className="text-[9px] text-red-600">{errorCsv}</p>}
+                    {crucerosCsv && (
+                      <>
+                        <div className="flex items-center justify-between gap-2 text-[9px]">
+                          <span className="truncate font-semibold text-slate-700" title={crucerosCsv.archivo}>{crucerosCsv.archivo}</span>
+                          <select
+                            value={fechaCsv}
+                            aria-label="Fecha del escenario"
+                            onChange={(e) => {
+                              setFechaCsv(e.target.value);
+                              setHoraSimulacion(agregarCruceros(crucerosCsv.buques.filter(b => b.fecha === e.target.value)).horaPico);
+                            }}
+                            className="rounded border border-slate-200 bg-white px-1 py-0.5 text-slate-800"
+                          >
+                            {fechasCsv.map(fecha => <option key={fecha} value={fecha}>{fecha}</option>)}
+                          </select>
+                        </div>
+                        {buquesCsvFecha.map((buque, i) => (
+                          <div key={`${buque.nombre}-${i}`} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1">
+                            <div className="min-w-0">
+                              <span className="block truncate text-[10px] font-bold text-slate-800">{buque.nombre}</span>
+                              <span className="block text-[9px] text-slate-500">{String(buque.horaLlegada).padStart(2, '0')}:00 – {String(buque.horaSalida).padStart(2, '0')}:00 · {buque.porcentajeDesembarco}% desembarca</span>
+                            </div>
+                            <span className="shrink-0 font-mono text-[10px] font-bold text-slate-700">{buque.pasajeros.toLocaleString('es-ES')} pax</span>
+                          </div>
+                        ))}
+                        <div className="flex items-center justify-between rounded bg-cyan-50 px-2 py-1 text-[9px] text-cyan-900">
+                          <span className="font-medium">{buquesCsvFecha.length} buques · pico {String(agregadoCsv.horaPico).padStart(2, '0')}:00</span>
+                          <span className="font-mono font-bold">{pasajerosModoCruceros.toLocaleString('es-ES')} pasajeros</span>
+                        </div>
+                        {crucerosCsv.avisos.length > 0 && <p className="text-[9px] text-amber-700">{crucerosCsv.avisos.slice(0, 3).join(' ')}{crucerosCsv.avisos.length > 3 ? ` (+${crucerosCsv.avisos.length - 3} más)` : ''}</p>}
+                      </>
+                    )}
                   </div>
                 )}
 
@@ -1229,7 +1310,7 @@ export default function App() {
                   </div>
                 )}
 
-                {claveEscenario === 'presion-alta-demanda' && modoCruceros !== 'manual' && (
+                {claveEscenario === 'presion-alta-demanda' && modoCruceros !== 'manual' && modoCruceros !== 'archivo' && (
                   <label className="block text-[9px] font-semibold text-slate-600">Distribución %
                     <input type="number" min="20" max="100" value={porcentajeDesembarco} onChange={(e) => setPorcentajeDesembarco(Number(e.target.value))} className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-slate-800" />
                   </label>
