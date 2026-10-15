@@ -1,32 +1,22 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ConnectorConfigurationModal } from './ConnectorConfigurationModal';
 import { pidModuleLabel } from '../services/interoperabilityCatalogService';
 import {
   Plus,
   ArrowRight,
-  CheckCircle2,
   CloudCog,
   ExternalLink,
-  FileText,
-  GitBranch,
   Link2,
   LoaderCircle,
   Map,
   Network,
-  Play,
   PlugZap,
-  RefreshCw,
   ShieldCheck,
-  SlidersHorizontal,
   X
 } from 'lucide-react';
 import {
   InteroperabilityArchitecture,
-  InteroperabilityConnector,
-  ModelInstantiationPreview,
-  ModelVariableDefinition,
-  OwnModelResult,
-  ReusableModelTemplate
+  InteroperabilityConnector
 } from '../types/interoperability';
 
 interface InteroperabilityModalProps {
@@ -37,60 +27,26 @@ interface InteroperabilityModalProps {
 
 interface ArchitectureResponse { architecture: InteroperabilityArchitecture }
 interface ConnectorsResponse { destinationId: string; tenantId: string; total: number; connectors: InteroperabilityConnector[] }
-interface ModelsResponse { destinationId: string; total: number; models: ReusableModelTemplate[] }
 
 const DESTINATIONS = [
   { id: 'malaga', label: 'Málaga' },
   { id: 'palma', label: 'Palma' }
 ];
 
-const defaultsFor = (model: ReusableModelTemplate): Record<string, string | number | boolean> =>
-  Object.fromEntries(model.variables.map(variable => [variable.id, variable.defaultValue]));
-
-const variableType = (variable: ModelVariableDefinition): 'number' | 'string' | 'boolean' =>
-  variable.valueType || (typeof variable.defaultValue as 'number' | 'string' | 'boolean');
-
 export const InteroperabilityModal = ({ isOpen, onClose, initialDestinationId }: InteroperabilityModalProps) => {
   const [architecture, setArchitecture] = useState<InteroperabilityArchitecture | null>(null);
   const [connectors, setConnectors] = useState<InteroperabilityConnector[]>([]);
-  const [models, setModels] = useState<ReusableModelTemplate[]>([]);
   const [destinationId, setDestinationId] = useState(initialDestinationId);
-  const [activeTab, setActiveTab] = useState<'architecture' | 'connectors' | 'models'>('architecture');
-  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
-  const [selectedConnectorIds, setSelectedConnectorIds] = useState<string[]>([]);
-  const [parameters, setParameters] = useState<Record<string, string | number | boolean>>({});
-  const [showOwnModelForm, setShowOwnModelForm] = useState(false);
-  const [ownTitle, setOwnTitle] = useState('');
-  const [ownDomain, setOwnDomain] = useState('');
-  const [ownSummary, setOwnSummary] = useState('');
-  const [ownVariableId, setOwnVariableId] = useState('factorLocal');
-  const [ownVariableLabel, setOwnVariableLabel] = useState('Factor local');
-  const [ownVariableDefault, setOwnVariableDefault] = useState(1);
-  const [ownModelResult, setOwnModelResult] = useState<OwnModelResult | null>(null);
-  const [isCreatingOwnModel, setIsCreatingOwnModel] = useState(false);
+  const [activeTab, setActiveTab] = useState<'architecture' | 'connectors'>('architecture');
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [error, setError] = useState('');
-  const [instantiation, setInstantiation] = useState<ModelInstantiationPreview | null>(null);
-  const [isInstantiating, setIsInstantiating] = useState(false);
   const [isNewConnectorModalOpen, setIsNewConnectorModalOpen] = useState(false);
   const requestSequence = useRef(0);
-
-  const selectModel = (model: ReusableModelTemplate, availableConnectors = connectors) => {
-    setSelectedModelId(model.id);
-    setParameters(defaultsFor(model));
-    setSelectedConnectorIds(
-      availableConnectors
-        .filter(connector => model.requiredLanes.includes(connector.lane) && connector.status !== 'PENDIENTE_AUTORIZACION')
-        .map(connector => connector.id)
-    );
-    setInstantiation(null);
-  };
 
   const load = (targetDestinationId: string) => {
     const requestId = ++requestSequence.current;
     setStatus('loading');
     setError('');
-    setInstantiation(null);
     return Promise.all([
       fetch('/api/interoperability/architecture').then(response => {
         if (!response.ok) throw new Error('No se pudo cargar la arquitectura de interoperabilidad.');
@@ -99,18 +55,11 @@ export const InteroperabilityModal = ({ isOpen, onClose, initialDestinationId }:
       fetch(`/api/interoperability/connectors?destino=${encodeURIComponent(targetDestinationId)}`).then(response => {
         if (!response.ok) throw new Error('No se pudieron cargar los conectores del destino.');
         return response.json() as Promise<ConnectorsResponse>;
-      }),
-      fetch(`/api/models/reusable?destino=${encodeURIComponent(targetDestinationId)}`).then(response => {
-        if (!response.ok) throw new Error('No se pudo cargar el catálogo de modelos reutilizables.');
-        return response.json() as Promise<ModelsResponse>;
       })
-    ]).then(([architectureResponse, connectorsResponse, modelsResponse]) => {
+    ]).then(([architectureResponse, connectorsResponse]) => {
       if (requestId !== requestSequence.current) return;
       setArchitecture(architectureResponse.architecture);
       setConnectors(connectorsResponse.connectors);
-      setModels(modelsResponse.models);
-      const defaultModel = modelsResponse.models[0];
-      if (defaultModel) selectModel(defaultModel, connectorsResponse.connectors);
       setStatus('ready');
     }).catch((reason: Error) => {
       if (requestId !== requestSequence.current) return;
@@ -128,97 +77,9 @@ export const InteroperabilityModal = ({ isOpen, onClose, initialDestinationId }:
     void load(initialDestinationId);
   }, [isOpen, initialDestinationId]);
 
-  const selectedModel = useMemo(
-    () => models.find(model => model.id === selectedModelId) || models[0] || null,
-    [models, selectedModelId]
-  );
-
   const changeDestination = (nextDestinationId: string) => {
     setDestinationId(nextDestinationId);
-    setSelectedModelId(null);
-    setSelectedConnectorIds([]);
-    setParameters({});
-    setOwnModelResult(null);
     void load(nextDestinationId);
-  };
-
-  const instantiate = async () => {
-    if (!selectedModel) return;
-    setIsInstantiating(true);
-    setInstantiation(null);
-    try {
-      const response = await fetch(`/api/models/reusable/${encodeURIComponent(selectedModel.id)}/instantiate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          destinationId,
-          connectorIds: selectedConnectorIds,
-          parameters
-        })
-      });
-      const result = await response.json() as ModelInstantiationPreview;
-      setInstantiation(result);
-      if (!response.ok && !result.errors?.length) setError('No fue posible validar la instancia del modelo.');
-    } catch {
-      setError('No fue posible validar la instancia del modelo.');
-    } finally {
-      setIsInstantiating(false);
-    }
-  };
-
-  const createOwnModel = async () => {
-    setIsCreatingOwnModel(true);
-    setOwnModelResult(null);
-    try {
-      const response = await fetch('/api/models/own', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          destinationId,
-          title: ownTitle,
-          domain: ownDomain,
-          summary: ownSummary,
-          requiredLanes: ['ONTOLOGICO', 'NO_ONTOLOGICO_HISTORICO'],
-          sourceRequirements: ['Fuente ontológica o activos normalizados', 'Fuente histórica o contextual del destino'],
-          variables: [{ id: ownVariableId, label: ownVariableLabel, defaultValue: ownVariableDefault, valueType: 'number', min: 0, max: 10, required: true }],
-          ruleSummary: 'La variable local ajusta el comportamiento de la plantilla en el destino propietario.',
-          privacyRule: 'El borrador no puede contener datos personales; las fuentes se vinculan y clasifican antes de activarse.'
-        })
-      });
-      const result = await response.json() as OwnModelResult;
-      setOwnModelResult(result);
-      if (result.valid && result.model) {
-        setModels(previous => [...previous, result.model!]);
-        selectModel(result.model);
-        setShowOwnModelForm(false);
-        setOwnTitle('');
-        setOwnDomain('');
-        setOwnSummary('');
-      }
-    } catch {
-      setOwnModelResult({ persistence: 'REJECTED', valid: false, errors: ['No se pudo crear el borrador de modelo propio.'] });
-    } finally {
-      setIsCreatingOwnModel(false);
-    }
-  };
-
-  const publishOwnModel = async () => {
-    if (!selectedModel) return;
-    try {
-      const response = await fetch(`/api/models/${encodeURIComponent(selectedModel.id)}/publish`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ destinationId })
-      });
-      const result = await response.json() as OwnModelResult;
-      setOwnModelResult(result);
-      if (result.valid && result.model) {
-        setModels(previous => previous.map(model => model.id === result.model!.id ? result.model! : model));
-        selectModel(result.model);
-      }
-    } catch {
-      setOwnModelResult({ persistence: 'REJECTED', valid: false, errors: ['No se pudo publicar el modelo propio.'] });
-    }
   };
 
   if (!isOpen) return null;
@@ -247,12 +108,11 @@ export const InteroperabilityModal = ({ isOpen, onClose, initialDestinationId }:
             <div className="flex rounded-lg border border-slate-200 bg-white p-1 text-xs font-semibold">
               {[
                 ['architecture', 'Arquitectura', Network],
-                ['connectors', 'Conectores', CloudCog],
-                ['models', 'Catálogo de modelos', GitBranch]
+                ['connectors', 'Conectores', CloudCog]
               ].map(([id, label, Icon]) => (
                 <button
                   key={id as string}
-                  onClick={() => setActiveTab(id as 'architecture' | 'connectors' | 'models')}
+                  onClick={() => setActiveTab(id as 'architecture' | 'connectors')}
                   className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 transition-colors ${activeTab === id ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}
                 >
                   <Icon className="h-3.5 w-3.5" /> {label as string}
@@ -355,72 +215,6 @@ export const InteroperabilityModal = ({ isOpen, onClose, initialDestinationId }:
                       </article>
                     ))}
                   </div>
-                </div>
-              )}
-
-              {activeTab === 'models' && (
-                <div className="grid gap-5 lg:grid-cols-[1.35fr_0.85fr]">
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-2"><div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500"><GitBranch className="h-4 w-4 text-pink-600" /> Catálogo de plantillas reutilizables</div><div className="flex items-center gap-2"><span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">{models.length} modelos</span><button onClick={() => { setShowOwnModelForm(value => !value); setOwnModelResult(null); }} className="rounded-lg bg-violet-600 px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-violet-700">Crear modelo propio</button></div></div>
-
-                    {showOwnModelForm && (
-                      <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-4">
-                        <div className="flex items-center gap-2 text-xs font-bold text-violet-900"><FileText className="h-4 w-4" /> Borrador propio de {DESTINATIONS.find(destination => destination.id === destinationId)?.label}</div>
-                        <p className="mt-1 text-[11px] leading-relaxed text-violet-900">El borrador queda aislado en el destino propietario. Solo después de revisar variables, fuentes, evidencia y privacidad puede publicarse como plantilla reutilizable.</p>
-                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                          <label className="text-[11px] font-semibold text-slate-700">Título<input value={ownTitle} onChange={event => setOwnTitle(event.target.value)} placeholder="Ej. Turismo astronómico" className="mt-1 w-full rounded-lg border border-violet-200 bg-white px-2 py-1.5 text-xs" /></label>
-                          <label className="text-[11px] font-semibold text-slate-700">Dominio<input value={ownDomain} onChange={event => setOwnDomain(event.target.value)} placeholder="Ej. Experiencias singulares" className="mt-1 w-full rounded-lg border border-violet-200 bg-white px-2 py-1.5 text-xs" /></label>
-                          <label className="sm:col-span-2 text-[11px] font-semibold text-slate-700">Resumen<textarea value={ownSummary} onChange={event => setOwnSummary(event.target.value)} placeholder="Qué problema resuelve y qué simula" className="mt-1 min-h-16 w-full rounded-lg border border-violet-200 bg-white px-2 py-1.5 text-xs" /></label>
-                          <label className="text-[11px] font-semibold text-slate-700">ID de variable<input value={ownVariableId} onChange={event => setOwnVariableId(event.target.value)} className="mt-1 w-full rounded-lg border border-violet-200 bg-white px-2 py-1.5 text-xs font-mono" /></label>
-                          <label className="text-[11px] font-semibold text-slate-700">Etiqueta de variable<input value={ownVariableLabel} onChange={event => setOwnVariableLabel(event.target.value)} className="mt-1 w-full rounded-lg border border-violet-200 bg-white px-2 py-1.5 text-xs" /></label>
-                          <label className="text-[11px] font-semibold text-slate-700">Valor por defecto<input type="number" min="0" max="10" step="0.1" value={ownVariableDefault} onChange={event => setOwnVariableDefault(Number(event.target.value))} className="mt-1 w-full rounded-lg border border-violet-200 bg-white px-2 py-1.5 text-xs" /></label>
-                        </div>
-                        <button disabled={isCreatingOwnModel} onClick={() => void createOwnModel()} className="mt-3 flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-2 text-xs font-bold text-white hover:bg-violet-700 disabled:opacity-60"><CheckCircle2 className="h-3.5 w-3.5" /> {isCreatingOwnModel ? 'Validando…' : 'Guardar borrador validado'}</button>
-                      </div>
-                    )}
-
-                    {ownModelResult && <div className={`rounded-lg border p-3 text-[11px] ${ownModelResult.valid ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-rose-200 bg-rose-50 text-rose-900'}`}>{ownModelResult.valid ? <span><b>Operación válida:</b> {ownModelResult.persistence}. La demostración conserva el modelo en memoria; PostGIS lo persistirá tras autorización.</span> : <ul className="list-disc pl-4">{ownModelResult.errors.map(item => <li key={item}>{item}</li>)}</ul>}</div>}
-
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {models.map(model => (
-                        <button key={model.id} onClick={() => selectModel(model)} className={`rounded-xl border p-3 text-left transition-colors ${selectedModel?.id === model.id ? 'border-cyan-400 bg-cyan-50 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
-                          <div className="flex items-start justify-between gap-2"><span className="text-xs font-bold text-slate-800">{model.title}</span><span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${model.publication === 'REUTILIZABLE_PID' ? 'bg-emerald-50 text-emerald-700' : 'bg-violet-50 text-violet-700'}`}>{model.publication === 'REUTILIZABLE_PID' ? 'REUTILIZABLE' : 'PROPIO · BORRADOR'}</span></div>
-                          <p className="mt-1 text-[10px] font-semibold text-pink-700">{model.domain} · v{model.version}</p>
-                          <p className="mt-1.5 text-[11px] leading-relaxed text-slate-600">{model.summary}</p>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {selectedModel && (
-                    <aside className="h-fit rounded-xl border border-slate-200 bg-slate-50 p-4 lg:sticky lg:top-24">
-                      <div className="flex items-start justify-between gap-3"><div><span className="text-[10px] font-bold uppercase tracking-wider text-pink-600">Instancia local</span><h3 className="mt-1 text-sm font-bold text-slate-800">{selectedModel.title}</h3></div><SlidersHorizontal className="h-4 w-4 text-cyan-600" /></div>
-                      <p className="mt-2 text-[11px] leading-relaxed text-slate-600">{selectedModel.ruleSummary}</p>
-                      <div className="mt-3 text-[11px]"><span className="font-bold text-slate-700">Fuentes mínimas</span><ul className="mt-1 space-y-1 text-slate-600">{selectedModel.sourceRequirements.map(requirement => <li key={requirement}>• {requirement}</li>)}</ul></div>
-
-                      <div className="mt-3 space-y-2 border-t border-slate-200 pt-3">
-                        <span className="block text-[11px] font-bold text-slate-700">Conectores autorizados a vincular</span>
-                        {connectors.filter(connector => selectedModel.requiredLanes.includes(connector.lane)).map(connector => {
-                          const unavailable = connector.status === 'PENDIENTE_AUTORIZACION';
-                          return <label key={connector.id} className={`flex items-start gap-2 rounded-lg border p-2 text-[10px] ${unavailable ? 'cursor-not-allowed border-amber-200 bg-amber-50 text-amber-800' : 'cursor-pointer border-slate-200 bg-white text-slate-700'}`}><input type="checkbox" disabled={unavailable} checked={selectedConnectorIds.includes(connector.id)} onChange={event => setSelectedConnectorIds(previous => event.target.checked ? [...new Set([...previous, connector.id])] : previous.filter(id => id !== connector.id))} className="mt-0.5 accent-cyan-600" /><span><b>{connector.title}</b><br />{unavailable ? 'Pendiente de autorización: no vinculable.' : `${connector.lane.replaceAll('_', ' ')} · ${connector.status.replaceAll('_', ' ')}`}</span></label>;
-                        })}
-                      </div>
-
-                      <div className="mt-3 space-y-2 border-t border-slate-200 pt-3">
-                        <span className="block text-[11px] font-bold text-slate-700">Parámetros de la plantilla</span>
-                        {selectedModel.variables.map(variable => {
-                          const type = variableType(variable);
-                          const value = parameters[variable.id];
-                          return <label key={variable.id} className="block text-[11px] font-semibold text-slate-700">{variable.label}{variable.unit ? ` (${variable.unit})` : ''}{type === 'boolean' ? <input type="checkbox" checked={Boolean(value)} onChange={event => setParameters(previous => ({ ...previous, [variable.id]: event.target.checked }))} className="ml-2 accent-cyan-600" /> : variable.allowedValues ? <select value={String(value)} onChange={event => setParameters(previous => ({ ...previous, [variable.id]: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-medium text-slate-700">{variable.allowedValues.map(option => <option key={option} value={option}>{option}</option>)}</select> : <input type={type === 'number' ? 'number' : 'text'} min={variable.min} max={variable.max} step={type === 'number' ? 'any' : undefined} value={String(value ?? '')} onChange={event => setParameters(previous => ({ ...previous, [variable.id]: type === 'number' ? Number(event.target.value) : event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-medium text-slate-700" />}</label>;
-                        })}
-                      </div>
-
-                      {selectedModel.publication === 'MODELO_PROPIO' && selectedModel.ownerDestinationId === destinationId && <button onClick={() => void publishOwnModel()} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-violet-300 bg-violet-50 px-3 py-2 text-xs font-bold text-violet-800 hover:bg-violet-100"><GitBranch className="h-3.5 w-3.5" /> Publicar como plantilla reutilizable</button>}
-                      <button disabled={isInstantiating} onClick={() => void instantiate()} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-slate-800 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-slate-700 disabled:opacity-60"><Play className="h-3.5 w-3.5" /> {isInstantiating ? 'Validando…' : `Validar instancia para ${DESTINATIONS.find(destination => destination.id === destinationId)?.label}`}</button>
-                      {instantiation && <div className={`mt-3 rounded-lg border p-3 text-[11px] leading-relaxed ${instantiation.valid ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-rose-200 bg-rose-50 text-rose-900'}`}><div className="flex items-center gap-1.5 font-bold">{instantiation.valid ? <CheckCircle2 className="h-3.5 w-3.5" /> : <RefreshCw className="h-3.5 w-3.5" />}{instantiation.valid ? 'Instancia validada' : 'Instancia rechazada'}</div>{instantiation.valid ? <p className="mt-1">Estado: <b>{instantiation.persistence}</b>. Se vincularían {instantiation.instance?.connectorIds.length} conectores con parámetros validados por la plantilla.</p> : <ul className="mt-1 list-disc pl-4">{instantiation.errors.map(item => <li key={item}>{item}</li>)}</ul>}</div>}
-                      <a href={selectedModel.evidence.url} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 text-[11px] font-semibold text-cyan-700 hover:text-cyan-900"><FileText className="h-3 w-3" /> Evidencia de la plantilla</a>
-                    </aside>
-                  )}
                 </div>
               )}
             </div>
