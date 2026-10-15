@@ -43,7 +43,7 @@ export function descargarPlantillaCrucerosCsv(): void {
   URL.revokeObjectURL(url);
 }
 
-function dividirLinea(linea: string, separador: string): string[] {
+export function dividirLinea(linea: string, separador: string): string[] {
   const campos: string[] = [];
   let actual = '';
   let entreComillas = false;
@@ -60,7 +60,7 @@ function dividirLinea(linea: string, separador: string): string[] {
   return campos;
 }
 
-const normalizar = (texto: string) => texto.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+export const normalizar = (texto: string) => texto.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 
 const ALIAS_COLUMNAS: Record<string, string[]> = {
   nombre: ['nombre', 'crucero', 'buque', 'barco', 'name', 'ship'],

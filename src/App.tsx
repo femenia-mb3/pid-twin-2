@@ -4,6 +4,8 @@ import { MacroOptimizationModal } from "./components/MacroOptimizationModal";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TIPOS_CRUCERO } from './data/cruiseShipTypes';
 import { agregarCruceros, descargarPlantillaCrucerosCsv, parsearCrucerosCsv, type BuqueCsv } from './services/cruiseCsv';
+import { descargarPlantillaImbornalesCsv, parsearImbornalesCsv, resumirImbornales, type ImbornalCsv } from './services/drainCsv';
+import { descargarPlantillaRecintosCsv, parsearRecintosCsv, resumirRecintos, type RecintoCsv } from './services/venueCsv';
 import type { TraficoPuertoMalaga } from './services/malagaPortTrafficService';
 import { 
   DESTINOS_DEMO, 
@@ -102,6 +104,15 @@ import { KpiMapa } from './services/kpiBuildingColors';
 // Pasajeros equivalentes del ajuste manual por defecto (2 llegadas x 9.500): magnitud 1 del Escenario 1.
 const PASAJEROS_REFERENCIA_CRUCEROS = 2 * 9500;
 
+// Espacios naturales y senderos: el coeficiente de terreno reduce la capacidad efectiva del sendero.
+const TERRENO_SENDERO = {
+  muy_buena: { etiqueta: 'Muy buena', factor: 1 },
+  buena: { etiqueta: 'Buena', factor: 0.85 },
+  mala: { etiqueta: 'Mala', factor: 0.6 },
+  muy_mala: { etiqueta: 'Muy mala', factor: 0.35 },
+} as const;
+type CondicionTerreno = keyof typeof TERRENO_SENDERO;
+const SENDERO_REFERENCIA = { capacidad: 600, sensibilidad: 1.2, visitantes: 500, terreno: 'buena' as CondicionTerreno };
 const DRENAJE_REFERENCIA ={ eficiencia: 70, imbornales: 4000, caudalLs: 20 };
 const CAPACIDAD_DRENAJE_REFERENCIA_LS = DRENAJE_REFERENCIA.imbornales * DRENAJE_REFERENCIA.caudalLs * (DRENAJE_REFERENCIA.eficiencia / 100);
 
@@ -178,10 +189,31 @@ export default function App() {
   const [pasajerosCruceros, setPasajerosCruceros] = useState<number>(9500);
   const [porcentajeDesembarco, setPorcentajeDesembarco] = useState<number>(78);
   const [asistentesEvento, setAsistentesEvento] = useState<number>(32000);
+  const [capacidadSendero, setCapacidadSendero] = useState<number>(SENDERO_REFERENCIA.capacidad);
+  const [factorSensibilidad, setFactorSensibilidad] = useState<number>(SENDERO_REFERENCIA.sensibilidad);
+  const [visitantesSendero, setVisitantesSendero] = useState<number>(SENDERO_REFERENCIA.visitantes);
+  const [terrenoSendero, setTerrenoSendero] = useState<CondicionTerreno>(SENDERO_REFERENCIA.terreno);
+  // Escenario 2: recintos (nº y aforo medio) y ventana horaria del evento; el CSV de recintos puede rellenarlos.
+  const [numeroRecintos, setNumeroRecintos] = useState<number>(8);
+  const [capacidadRecinto, setCapacidadRecinto] = useState<number>(4000);
+  const [horaInicioEvento, setHoraInicioEvento] = useState<number>(18);
+  const [horaFinEvento, setHoraFinEvento] = useState<number>(2);
+  const [modoEvento, setModoEvento] = useState<'manual' | 'archivo'>('manual');
+  const [recintosCsv, setRecintosCsv] = useState<{ archivo: string; recintos: RecintoCsv[]; avisos: string[] } | null>(null);
+  const [errorRecintosCsv, setErrorRecintosCsv] = useState<string | null>(null);
+  const [arrastrandoRecintos, setArrastrandoRecintos] = useState<boolean>(false);
+  const [listaRecintosAbierta, setListaRecintosAbierta] = useState<boolean>(false);
+  const capacidadTotalRecintos = numeroRecintos * capacidadRecinto;
   const [precipitacionMmH, setPrecipitacionMmH] = useState<number>(45);
   const [eficienciaDrenaje, setEficienciaDrenaje] = useState<number>(DRENAJE_REFERENCIA.eficiencia);
   const [numeroImbornales, setNumeroImbornales] = useState<number>(DRENAJE_REFERENCIA.imbornales);
   const [caudalImbornalLs, setCaudalImbornalLs] = useState<number>(DRENAJE_REFERENCIA.caudalLs);
+  // Imbornales importados desde un CSV (arrastrar y soltar en el panel derecho).
+  const [imbornalesCsv, setImbornalesCsv] = useState<{ archivo: string; imbornales: ImbornalCsv[]; avisos: string[] } | null>(null);
+  const [errorImbornalesCsv, setErrorImbornalesCsv] = useState<string | null>(null);
+  const [arrastrandoImbornales, setArrastrandoImbornales] = useState<boolean>(false);
+  const [modoDrenaje, setModoDrenaje] = useState<'manual' | 'archivo'>('manual');
+  const [listaImbornalesAbierta, setListaImbornalesAbierta] = useState<boolean>(false);
 
   // 5. Modales e interacciones
   const [elementoSeleccionado, setElementoSeleccionado] = useState<{ tipo: any; data: any } | null>(null);
@@ -241,16 +273,19 @@ export default function App() {
       return curva[Math.max(0, Math.min(curva.length - 1, horaSimulacion - 8))] ?? (horaSimulacion < 8 ? 0.04 : 0.08);
     }
     if (claveEscenario === 'evento-local') {
-      const horaNocturna = horaSimulacion < 6 ? horaSimulacion + 24 : horaSimulacion;
-      const distanciaPico = Math.abs(horaNocturna - 22);
-      return horaNocturna < 18 || horaNocturna > 26 ? 0.05 : Math.max(0.18, 1 - distanciaPico * 0.2);
+      // Ventana [inicio, fin] (el fin pasa al día siguiente si es menor o igual que el inicio); pico en el punto medio.
+      const fin = horaFinEvento <= horaInicioEvento ? horaFinEvento + 24 : horaFinEvento;
+      const horaEvento = horaSimulacion < horaInicioEvento ? horaSimulacion + 24 : horaSimulacion;
+      if (horaEvento > fin) return 0.05;
+      const semiancho = Math.max(1, (fin - horaInicioEvento) / 2);
+      return Math.max(0.18, 1 - 0.8 * Math.abs(horaEvento - (horaInicioEvento + semiancho)) / semiancho);
     }
     if (claveEscenario === 'episodio-meteorologico') {
       const distanciaPico = Math.abs(horaSimulacion - 18);
       return distanciaPico > 4 ? 0.05 : Math.max(0.12, 1 - distanciaPico * 0.24);
     }
     return 0;
-  }, [claveEscenario, horaSimulacion, modoCruceros, agregadoCsv]);
+  }, [claveEscenario, horaSimulacion, modoCruceros, agregadoCsv, horaInicioEvento, horaFinEvento]);
 
   // Pasajeros que llegan según el modo: flota elegida por tipos o buques detectados en el puerto.
   const pasajerosModoCruceros = modoCruceros === 'flota'
@@ -296,6 +331,40 @@ export default function App() {
     }
   }, []);
 
+  const cargarArchivoImbornales = useCallback(async (archivo: File | undefined) => {
+    if (!archivo) return;
+    try {
+      const { imbornales, avisos } = parsearImbornalesCsv(await archivo.text());
+      const resumen = resumirImbornales(imbornales);
+      setImbornalesCsv({ archivo: archivo.name, imbornales, avisos });
+      setNumeroImbornales(resumen.numeroImbornales);
+      setCaudalImbornalLs(Math.round(resumen.caudalMedioLs * 100) / 100);
+      setErrorImbornalesCsv(null);
+      setModoDrenaje('archivo');
+    } catch (error) {
+      setErrorImbornalesCsv(error instanceof Error ? error.message : 'No se pudo leer el archivo CSV.');
+    }
+  }, []);
+
+  const cargarArchivoRecintos = useCallback(async (archivo: File | undefined) => {
+    if (!archivo) return;
+    try {
+      const { recintos, avisos } = parsearRecintosCsv(await archivo.text());
+      const resumen = resumirRecintos(recintos);
+      setRecintosCsv({ archivo: archivo.name, recintos, avisos });
+      setNumeroRecintos(resumen.numeroRecintos);
+      setCapacidadRecinto(resumen.capacidadMedia);
+      if (resumen.horaInicio !== null && resumen.horaFin !== null) {
+        setHoraInicioEvento(resumen.horaInicio);
+        setHoraFinEvento(resumen.horaFin);
+      }
+      setErrorRecintosCsv(null);
+      setModoEvento('archivo');
+    } catch (error) {
+      setErrorRecintosCsv(error instanceof Error ? error.message : 'No se pudo leer el archivo CSV.');
+    }
+  }, []);
+
   // Capacidad de evacuación de la red de imbornales (L/s) = nº de imbornales x caudal medio x eficiencia.
   const capacidadDrenajeLs = numeroImbornales * caudalImbornalLs * (eficienciaDrenaje / 100);
 
@@ -305,14 +374,15 @@ export default function App() {
       if (modoCruceros !== 'manual') return Math.min(1.5, (pasajerosModoCruceros / PASAJEROS_REFERENCIA_CRUCEROS) * (porcentajeDesembarco / 78));
       return Math.min(1.5, (numeroCruceros / 2) * (pasajerosCruceros / 9500) * (porcentajeDesembarco / 78));
     }
-    if (claveEscenario === 'evento-local') return Math.min(1.5, asistentesEvento / 32000);
+    // La asistencia efectiva no puede superar el aforo total de los recintos.
+    if (claveEscenario === 'evento-local') return Math.min(1.5, Math.min(asistentesEvento, capacidadTotalRecintos) / 32000);
     if (claveEscenario === 'episodio-meteorologico') {
       // Menos capacidad de evacuación que la de referencia => más agua acumulada para la misma lluvia.
       const presionDrenaje = Math.min(1.8, Math.max(0.4, Math.pow(CAPACIDAD_DRENAJE_REFERENCIA_LS / Math.max(1, capacidadDrenajeLs), 0.6)));
       return Math.min(1.5, (precipitacionMmH / 45) * presionDrenaje);
     }
     return 0;
-  }, [claveEscenario, numeroCruceros, pasajerosCruceros, porcentajeDesembarco, modoCruceros, pasajerosModoCruceros, agregadoCsv, asistentesEvento, precipitacionMmH, capacidadDrenajeLs]);
+  }, [claveEscenario, numeroCruceros, pasajerosCruceros, porcentajeDesembarco, modoCruceros, pasajerosModoCruceros, agregadoCsv, asistentesEvento, capacidadTotalRecintos, precipitacionMmH, capacidadDrenajeLs]);
 
   const parametrosBaseSimulacion: ParametrosDestinoConfigurables = useMemo(() => ({
     umbralSaturacionAlerta: umbralAlerta,
@@ -381,8 +451,14 @@ export default function App() {
     return escenariosDisponibles.find(escenario => escenario.id === escenarioSeleccionadoId) || escenariosDisponibles[0];
   }, [escenarioSeleccionadoId, escenariosDisponibles]);
 
+  // Espacios naturales y senderos: capacidad efectiva = capacidad x coeficiente de terreno / factor de sensibilidad.
+  const esEspacioNatural = escenarioEditorActivo?.sourceModelId === 'modelo_espacios_naturales';
+  const capacidadEfectivaSendero = Math.round(capacidadSendero * TERRENO_SENDERO[terrenoSendero].factor / Math.max(0.1, factorSensibilidad));
+  const ocupacionSendero = capacidadEfectivaSendero > 0 ? visitantesSendero / capacidadEfectivaSendero : 1.5;
   const parametrosSimulacion = escenarioEditorBinding?.scenario.id === escenarioActual.id
-    ? escenarioEditorBinding.parameters
+    ? (esEspacioNatural
+      ? { ...escenarioEditorBinding.parameters, intensidadEscenario: Math.min(1.5, ocupacionSendero) }
+      : escenarioEditorBinding.parameters)
     : parametrosBaseSimulacion;
 
   // Los escenarios generados en tiempo de ejecución usan ids propios; los visores identifican la
@@ -395,7 +471,7 @@ export default function App() {
     : escenarioActual.id;
 
   const intensidadVisual = escenarioEditorBinding?.scenario.id === escenarioActual.id
-    ? escenarioEditorBinding.parameters.intensidadEscenario
+    ? parametrosSimulacion.intensidadEscenario
     : Math.min(1.5, intensidadTemporal * magnitudEscenario);
 
   const resultadoSimulacion = useMemo(() => {
@@ -516,10 +592,24 @@ export default function App() {
     setPasajerosCruceros(9500);
     setPorcentajeDesembarco(78);
     setAsistentesEvento(32000);
+    setCapacidadSendero(SENDERO_REFERENCIA.capacidad);
+    setFactorSensibilidad(SENDERO_REFERENCIA.sensibilidad);
+    setVisitantesSendero(SENDERO_REFERENCIA.visitantes);
+    setTerrenoSendero(SENDERO_REFERENCIA.terreno);
+    setNumeroRecintos(8);
+    setCapacidadRecinto(4000);
+    setHoraInicioEvento(18);
+    setHoraFinEvento(2);
+    setRecintosCsv(null);
+    setErrorRecintosCsv(null);
+    setModoEvento('manual');
     setPrecipitacionMmH(45);
     setEficienciaDrenaje(DRENAJE_REFERENCIA.eficiencia);
     setNumeroImbornales(DRENAJE_REFERENCIA.imbornales);
     setCaudalImbornalLs(DRENAJE_REFERENCIA.caudalLs);
+    setImbornalesCsv(null);
+    setErrorImbornalesCsv(null);
+    setModoDrenaje('manual');
   };
 
   // Ids de escenario según el catálogo activo (v3 en destinos demostradores, presets generados en el resto).
@@ -1325,10 +1415,126 @@ export default function App() {
                 )}
 
                 {claveEscenario === 'evento-local' && (
-                  <label className="block border-t border-slate-100 pt-2 text-[9px] font-semibold text-slate-600">Asistencia prevista
-                    <input type="range" min="8000" max="50000" step="1000" value={asistentesEvento} onChange={(e) => setAsistentesEvento(Number(e.target.value))} className="mt-1.5 h-1.5 w-full cursor-pointer accent-fuchsia-500" />
-                    <span className="mt-1 block text-right font-mono text-[11px] font-bold text-fuchsia-700">{asistentesEvento.toLocaleString('es-ES')} personas</span>
-                  </label>
+                  <div className="space-y-2 border-t border-slate-100 pt-2">
+                    <label className="block text-[9px] font-semibold text-slate-600">Asistencia prevista
+                      <input type="range" min="8000" max="50000" step="1000" value={asistentesEvento} onChange={(e) => setAsistentesEvento(Number(e.target.value))} className="mt-1.5 h-1.5 w-full cursor-pointer accent-fuchsia-500" />
+                      <span className="mt-1 block text-right font-mono text-[11px] font-bold text-fuchsia-700">{asistentesEvento.toLocaleString('es-ES')} personas</span>
+                    </label>
+                    <div className="flex gap-1">
+                      {([['manual', 'Parámetros'], ['archivo', 'Archivo CSV']] as const).map(([modo, etiqueta]) => (
+                        <button
+                          key={modo}
+                          type="button"
+                          onClick={() => setModoEvento(modo)}
+                          className={`flex-1 rounded-md border px-1 py-1 text-[9px] font-bold transition-colors ${modoEvento === modo ? 'border-fuchsia-600 bg-fuchsia-600 text-white shadow-sm' : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-white'}`}
+                        >{etiqueta}</button>
+                      ))}
+                    </div>
+                    {modoEvento === 'manual' && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="text-[9px] font-semibold text-slate-600">Nº de recintos<input type="number" min="1" max="200" step="1" value={numeroRecintos} onChange={(e) => setNumeroRecintos(Math.max(0, Number(e.target.value)))} className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-slate-800" /></label>
+                        <label className="text-[9px] font-semibold text-slate-600">Aforo medio (personas)<input type="number" min="50" max="20000" step="50" value={capacidadRecinto} onChange={(e) => setCapacidadRecinto(Math.max(0, Number(e.target.value)))} className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-slate-800" /></label>
+                        <label className="text-[9px] font-semibold text-slate-600">Hora de inicio<input type="number" min="0" max="23" step="1" value={horaInicioEvento} onChange={(e) => setHoraInicioEvento(Math.max(0, Math.min(23, Number(e.target.value))))} className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-slate-800" /></label>
+                        <label className="text-[9px] font-semibold text-slate-600">Hora de fin<input type="number" min="0" max="23" step="1" value={horaFinEvento} onChange={(e) => setHoraFinEvento(Math.max(0, Math.min(23, Number(e.target.value))))} className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-slate-800" /></label>
+                      </div>
+                    )}
+                    {modoEvento === 'archivo' && (
+                      <div className="space-y-1.5">
+                        <label
+                          onDragOver={(e) => { e.preventDefault(); setArrastrandoRecintos(true); }}
+                          onDragLeave={() => setArrastrandoRecintos(false)}
+                          onDrop={(e) => { e.preventDefault(); setArrastrandoRecintos(false); void cargarArchivoRecintos(e.dataTransfer.files[0]); }}
+                          className={`flex cursor-pointer flex-col items-center gap-0.5 rounded-lg border-2 border-dashed px-2 py-3 text-center text-[10px] transition-colors ${arrastrandoRecintos ? 'border-fuchsia-600 bg-fuchsia-50 text-fuchsia-800' : 'border-slate-300 bg-slate-50 text-slate-600 hover:border-fuchsia-400'}`}
+                        >
+                          <span className="font-bold">Arrastre aquí un archivo CSV de recintos</span>
+                          <span className="text-[9px] text-slate-500">o haga clic para seleccionarlo</span>
+                          <input type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => { void cargarArchivoRecintos(e.target.files?.[0]); e.target.value = ''; }} />
+                        </label>
+                        <button type="button" onClick={descargarPlantillaRecintosCsv} className="w-full rounded-md border border-fuchsia-200 bg-fuchsia-50 px-2 py-1 text-[10px] font-bold text-fuchsia-800 hover:bg-fuchsia-100">
+                          ⬇ Descargar archivo de ejemplo
+                        </button>
+                        <p className="text-[8px] leading-snug text-slate-400">Columnas: nombre; capacidad; latitud; longitud; hora_apertura (opcional); hora_cierre (opcional).</p>
+                        {errorRecintosCsv && <p className="text-[9px] text-red-600">{errorRecintosCsv}</p>}
+                        {recintosCsv && (
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between gap-2 text-[9px]">
+                              <span className="truncate font-semibold text-slate-700" title={recintosCsv.archivo}>{recintosCsv.archivo}</span>
+                              <button type="button" onClick={() => { setRecintosCsv(null); setNumeroRecintos(8); setCapacidadRecinto(4000); setHoraInicioEvento(18); setHoraFinEvento(2); }} className="shrink-0 rounded px-1 font-bold text-slate-400 hover:bg-red-100 hover:text-red-600" title="Quitar archivo">✕</button>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setListaRecintosAbierta(abierta => !abierta)}
+                              aria-expanded={listaRecintosAbierta}
+                              className="flex w-full items-center justify-between rounded bg-fuchsia-50 px-2 py-1 text-[9px] font-semibold text-fuchsia-900 hover:bg-fuchsia-100"
+                            >
+                              <span>{recintosCsv.recintos.length} recintos · {recintosCsv.recintos.reduce((t, r) => t + r.capacidad, 0).toLocaleString('es-ES')} plazas</span>
+                              <span>{listaRecintosAbierta ? 'Ocultar lista ▴' : 'Ver lista ▾'}</span>
+                            </button>
+                            {listaRecintosAbierta && <div className="max-h-40 space-y-1 overflow-y-auto pr-0.5">
+                              {recintosCsv.recintos.map((recinto, i) => (
+                                <div key={i} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1">
+                                  <div className="min-w-0">
+                                    <span className="block truncate text-[10px] font-bold text-slate-800">{recinto.nombre}</span>
+                                    <span className="block truncate text-[9px] text-slate-500">{recinto.lat.toFixed(5)}, {recinto.lon.toFixed(5)}{recinto.horaApertura !== null && recinto.horaCierre !== null ? ` · ${String(recinto.horaApertura).padStart(2, '0')}:00–${String(recinto.horaCierre).padStart(2, '0')}:00` : ''}</span>
+                                  </div>
+                                  <span className="shrink-0 font-mono text-[10px] font-bold text-slate-700">{recinto.capacidad.toLocaleString('es-ES')} pax</span>
+                                </div>
+                              ))}
+                            </div>}
+                            {recintosCsv.avisos.length > 0 && <p className="text-[9px] text-amber-700">{recintosCsv.avisos.slice(0, 3).join(' ')}{recintosCsv.avisos.length > 3 ? ` (+${recintosCsv.avisos.length - 3} más)` : ''}</p>}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div className="space-y-1 rounded border border-fuchsia-200 bg-white px-2 py-1 text-[9px] text-fuchsia-900">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">Aforo total ({numeroRecintos.toLocaleString('es-ES')} recintos)</span>
+                        <span className="font-mono font-bold" aria-label="Aforo total">{capacidadTotalRecintos.toLocaleString('es-ES')} personas</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">Ventana del evento</span>
+                        <span className="font-mono font-bold">{String(horaInicioEvento).padStart(2, '0')}:00 – {String(horaFinEvento).padStart(2, '0')}:00</span>
+                      </div>
+                      {asistentesEvento > capacidadTotalRecintos && <p className="text-[9px] font-medium text-amber-700">La asistencia prevista supera el aforo: se simula con {capacidadTotalRecintos.toLocaleString('es-ES')} personas.</p>}
+                    </div>
+                  </div>
+                )}
+
+                {esEspacioNatural && (
+                  <div className="space-y-2 border-t border-slate-100 pt-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="text-[9px] font-semibold text-slate-600">Capacidad del sendero (personas/día)<input type="number" min="1" max="20000" step="50" value={capacidadSendero} onChange={(e) => setCapacidadSendero(Math.max(0, Number(e.target.value)))} className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-slate-800" /></label>
+                      <label className="text-[9px] font-semibold text-slate-600">Visitantes previstos<input type="number" min="0" max="50000" step="10" value={visitantesSendero} onChange={(e) => setVisitantesSendero(Math.max(0, Number(e.target.value)))} className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-slate-800" /></label>
+                    </div>
+                    <label className="block text-[9px] font-semibold text-slate-600">Factor de sensibilidad ambiental
+                      <input type="range" min="0.5" max="2" step="0.1" value={factorSensibilidad} onChange={(e) => setFactorSensibilidad(Number(e.target.value))} className="mt-1.5 h-1.5 w-full cursor-pointer accent-green-600" />
+                      <span className="mt-1 block text-right font-mono text-[11px] font-bold text-green-700">{factorSensibilidad.toFixed(1)}</span>
+                    </label>
+                    <div className="space-y-1">
+                      <span className="block text-[9px] font-semibold text-slate-600">Condición del terreno</span>
+                      <div className="grid grid-cols-4 gap-1">
+                        {(Object.keys(TERRENO_SENDERO) as CondicionTerreno[]).map(clave => (
+                          <button
+                            key={clave}
+                            type="button"
+                            onClick={() => setTerrenoSendero(clave)}
+                            className={`rounded-md border px-1 py-1 text-[9px] font-bold transition-colors ${terrenoSendero === clave ? 'border-green-600 bg-green-600 text-white shadow-sm' : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-white'}`}
+                          >{TERRENO_SENDERO[clave].etiqueta}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-1 rounded border border-green-200 bg-white px-2 py-1 text-[9px] text-green-900">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">Capacidad efectiva del sendero</span>
+                        <span className="font-mono font-bold" aria-label="Capacidad efectiva">{capacidadEfectivaSendero.toLocaleString('es-ES')} personas/día</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">Ocupación prevista</span>
+                        <span className={`font-mono font-bold ${ocupacionSendero > 1 ? 'text-red-600' : ''}`}>{Math.round(ocupacionSendero * 100)}%</span>
+                      </div>
+                      {ocupacionSendero > 1 && <p className="font-medium text-red-600">Los visitantes previstos superan la capacidad efectiva del sendero.</p>}
+                    </div>
+                  </div>
                 )}
 
                 {claveEscenario === 'episodio-meteorologico' && (
@@ -1341,9 +1547,76 @@ export default function App() {
                     <input type="range" min="20" max="100" step="5" value={eficienciaDrenaje} onChange={(e) => setEficienciaDrenaje(Number(e.target.value))} className="mt-1.5 h-1.5 w-full cursor-pointer accent-sky-500" />
                     <span className="mt-1 block text-right font-mono text-[11px] font-bold text-sky-700">{eficienciaDrenaje}%</span>
                   </label>
+                  <div className="flex gap-1 border-t border-slate-100 pt-2">
+                    {([['manual', 'Parámetros'], ['archivo', 'Archivo CSV']] as const).map(([modo, etiqueta]) => (
+                      <button
+                        key={modo}
+                        type="button"
+                        onClick={() => setModoDrenaje(modo)}
+                        className={`flex-1 rounded-md border px-1 py-1 text-[9px] font-bold transition-colors ${modoDrenaje === modo ? 'border-sky-600 bg-sky-600 text-white shadow-sm' : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-white'}`}
+                      >{etiqueta}</button>
+                    ))}
+                  </div>
+                  {modoDrenaje === 'archivo' && (
+                  <div className="space-y-1.5">
+                  <label
+                    onDragOver={(e) => { e.preventDefault(); setArrastrandoImbornales(true); }}
+                    onDragLeave={() => setArrastrandoImbornales(false)}
+                    onDrop={(e) => { e.preventDefault(); setArrastrandoImbornales(false); void cargarArchivoImbornales(e.dataTransfer.files[0]); }}
+                    className={`flex cursor-pointer flex-col items-center gap-0.5 rounded-lg border-2 border-dashed px-2 py-3 text-center text-[10px] transition-colors ${arrastrandoImbornales ? 'border-sky-600 bg-sky-50 text-sky-800' : 'border-slate-300 bg-slate-50 text-slate-600 hover:border-sky-400'}`}
+                  >
+                    <span className="font-bold">Arrastre aquí un archivo CSV de imbornales</span>
+                    <span className="text-[9px] text-slate-500">o haga clic para seleccionarlo</span>
+                    <input type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => { void cargarArchivoImbornales(e.target.files?.[0]); e.target.value = ''; }} />
+                  </label>
+                  <button type="button" onClick={descargarPlantillaImbornalesCsv} className="w-full rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] font-bold text-sky-800 hover:bg-sky-100">
+                    ⬇ Descargar archivo de ejemplo
+                  </button>
+                  <p className="text-[8px] leading-snug text-slate-400">Columnas: modelo; capacidad_ls; latitud; longitud; calle; numero (opcional); unidades (opcional, 1 por defecto).</p>
+                  {errorImbornalesCsv && <p className="text-[9px] text-red-600">{errorImbornalesCsv}</p>}
+                  {imbornalesCsv && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between gap-2 text-[9px]">
+                        <span className="truncate font-semibold text-slate-700" title={imbornalesCsv.archivo}>{imbornalesCsv.archivo}</span>
+                        <button type="button" onClick={() => { setImbornalesCsv(null); setNumeroImbornales(DRENAJE_REFERENCIA.imbornales); setCaudalImbornalLs(DRENAJE_REFERENCIA.caudalLs); }} className="shrink-0 rounded px-1 font-bold text-slate-400 hover:bg-red-100 hover:text-red-600" title="Quitar archivo">✕</button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setListaImbornalesAbierta(abierta => !abierta)}
+                        aria-expanded={listaImbornalesAbierta}
+                        className="flex w-full items-center justify-between rounded bg-sky-50 px-2 py-1 text-[9px] font-semibold text-sky-900 hover:bg-sky-100"
+                      >
+                        <span>{imbornalesCsv.imbornales.length} filas · {numeroImbornales.toLocaleString('es-ES')} imbornales</span>
+                        <span>{listaImbornalesAbierta ? 'Ocultar lista ▴' : 'Ver lista ▾'}</span>
+                      </button>
+                      {listaImbornalesAbierta && <div className="max-h-40 space-y-1 overflow-y-auto pr-0.5">
+                        {imbornalesCsv.imbornales.map((imb, i) => (
+                          <div key={i} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1">
+                            <div className="min-w-0">
+                              <span className="block truncate text-[10px] font-bold text-slate-800">{imb.calle}{imb.numero ? `, ${imb.numero}` : ''}</span>
+                              <span className="block truncate text-[9px] text-slate-500">{imb.modelo} · {imb.lat.toFixed(5)}, {imb.lon.toFixed(5)}</span>
+                            </div>
+                            <span className="shrink-0 text-right font-mono text-[10px] font-bold text-slate-700">
+                              {imb.unidades > 1 && <span className="block text-[8px] font-medium text-slate-400">{imb.unidades} × {imb.capacidadLs.toLocaleString('es-ES')}</span>}
+                              {imb.totalLs.toLocaleString('es-ES')} L/s
+                            </span>
+                          </div>
+                        ))}
+                      </div>}
+                      {imbornalesCsv.avisos.length > 0 && <p className="text-[9px] text-amber-700">{imbornalesCsv.avisos.slice(0, 3).join(' ')}{imbornalesCsv.avisos.length > 3 ? ` (+${imbornalesCsv.avisos.length - 3} más)` : ''}</p>}
+                    </div>
+                  )}
+                  </div>
+                  )}
+                  {modoDrenaje === 'manual' && (
                   <div className="grid grid-cols-2 gap-2">
-                    <label className="text-[9px] font-semibold text-slate-600">Imbornales en la ciudad<input type="number" min="500" max="20000" step="100" value={numeroImbornales} onChange={(e) => setNumeroImbornales(Math.max(0, Number(e.target.value)))} className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-slate-800" /></label>
-                    <label className="text-[9px] font-semibold text-slate-600">Caudal medio (L/s por imbornal)<input type="number" min="1" max="60" step="1" value={caudalImbornalLs} onChange={(e) => setCaudalImbornalLs(Math.max(0, Number(e.target.value)))} className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-slate-800" /></label>
+                    <label className="text-[9px] font-semibold text-slate-600">Imbornales en la ciudad<input type="number" min="0" max="20000" step="1" value={numeroImbornales} onChange={(e) => setNumeroImbornales(Math.max(0, Number(e.target.value)))} className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-slate-800" /></label>
+                    <label className="text-[9px] font-semibold text-slate-600">Caudal medio (L/s por imbornal)<input type="number" min="1" max="60" step="0.5" value={caudalImbornalLs} onChange={(e) => setCaudalImbornalLs(Math.max(0, Number(e.target.value)))} className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-slate-800" /></label>
+                  </div>
+                  )}
+                  <div className="flex items-center justify-between rounded border border-sky-200 bg-white px-2 py-1 text-[9px] text-sky-900">
+                    <span className="font-medium">Suma de caudal de los imbornales ({numeroImbornales.toLocaleString('es-ES')} ud.)</span>
+                    <span className="font-mono font-bold" aria-label="Suma de L/s">{Math.round(numeroImbornales * caudalImbornalLs).toLocaleString('es-ES')} L/s</span>
                   </div>
                   <div className="flex items-center justify-between rounded bg-sky-50 px-2 py-1 text-[9px] text-sky-900">
                     <span className="font-medium">Capacidad de evacuación de la red</span>
